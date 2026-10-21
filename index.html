@@ -6,6 +6,9 @@
 <meta name="theme-color" content="#f5f3ee">
 <meta name="description" content="Tessera — a calm, infinite canvas for ideas, references and plans. Free, private, offline.">
 <title>Tessera</title>
+<script src="cloud-config.js"></script>
+<script>(function(){var c=window.TESSERA_CLOUD,h=document.documentElement;if(c&&c.url&&!/YOUR-/.test(c.url)&&!/^#(view|s)=/.test(location.hash)){window.__tessGate=1;h.classList.add('cl-pending');setTimeout(function(){if(!document.getElementById('clGate'))h.classList.remove('cl-pending')},8000)}})()</script>
+<style>html.cl-pending body>*:not(#clGate){visibility:hidden}</style>
 <script>try{var d=document.documentElement,L=JSON.parse(localStorage.getItem('tessera-look')||'{}')||{},m=L.mode||localStorage.getItem('tessera-theme')||'light';if(m==='auto')m=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';d.dataset.theme=m;var sh=m==='dark'?L.shade:L.lshade;if(sh&&sh!=='default')d.dataset.shade=sh;var a=L.accent;if(a&&a!=='lavender'){var st=['sky','mint','rose','amber','mono'].indexOf(a)>=0;d.dataset.accent=st?a:'custom';if(!st){var c=localStorage.getItem('tessera-accent-css');if(c){var s=document.createElement('style');s.id='accentCss';s.textContent=c;document.head.appendChild(s)}}}}catch(e){}</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -2016,7 +2019,7 @@ async function gcImages(){ if (!db) return; try { const used = usedImageIds();
 let saveT = 0;
 function saveSoon(changed = true){ if (VIEWER) return; clearTimeout(saveT); saveT = setTimeout(saveNow, 300); if (changed){ scheduleAutoBackup(); try { markVerDirty(); noteLocalChange(); markThumb(); if (curId && S.boards[curId]) S.boards[curId].editedAt = Date.now(); } catch {} } }
 async function saveNow(){
-  clearTimeout(saveT); if (!db) return;
+  clearTimeout(saveT); if (!db || window.__tessWiped) return;
   try { S.meta.lastBoard = curId; await kvSet('state', S); updateDueBadge(); verTick(); try { window.__tessOnSave?.(); } catch {} }
   catch { toast('Couldn’t save — storage may be full. Export a backup.', {label:'Export', fn:exportBackup}, 7000); }
 }
@@ -5656,7 +5659,7 @@ const TOUR = [
   {t:'Try it', d:'Double-click anywhere on the canvas to write a quick note. The tour moves on when you do.', spot:true, wait:true},
   {t:'Boards inside boards', d:'Breadcrumbs show where you are. Click the Tessera logo for pinned and recent boards.', el:'#tl'},
   {t:'Find anything', d:'Search every board or run any command. Ctrl K works from anywhere.', el:'#searchBtn'},
-  {t:'Private by design', d:'Everything stays on this device — no account, no cloud. Turn on auto-backup here so nothing is ever lost.', el:'#chip', hideOk:true},
+  {t:'Private by design', d:'Your boards are saved to your account and on this device. Auto-backup to a folder is an optional extra.', el:'#chip', hideOk:true},
   {t:'Present & share', d:'Frames become slides when you present. Ctrl E exports a PNG, PDF, Markdown or a board file you can send to anyone.', el:'#presBtn', hideOk:true},
   {t:'Make it yours', d:'Themes, accent colors, sounds, version history and the dock all live in this menu.', el:'#moreBtn'},
   {t:'You’re all set', d:'Press ? any time for the full guide and FAQ. Shortcuts and this tour live in the menu too. Enjoy the calm.', final:true}
@@ -6368,14 +6371,14 @@ function showWelcome(){
 <h1 class="wl-h sp-in" style="animation-delay:.05s">Welcome to Tessera</h1>
 <p class="wl-sub sp-in" style="animation-delay:.1s">A calm, infinite canvas for ideas, references and plans — notes, images, to-dos, storyboards and more, all in one place.</p>
 <div class="wl-facts sp-in" style="animation-delay:.15s">
-<div class="wl-fact"><span class="fi">${ico('device', 16)}</span><span><b>Private by design</b><span>No account, no cloud — boards stay in this browser on this device.</span></span></div>
-<div class="wl-fact"><span class="fi">${ico('trash', 16)}</span><span><b>Can be erased</b><span>Clearing site data or using a private window removes your boards.</span></span></div>
+<div class="wl-fact"><span class="fi">${ico('device', 16)}</span><span><b>Private by design</b><span>Your boards are saved to your account, so they follow you to any device.</span></span></div>
+<div class="wl-fact"><span class="fi">${ico('trash', 16)}</span><span><b>Works offline</b><span>Boards are also kept on this device and sync when you’re back online.</span></span></div>
 <div class="wl-fact"><span class="fi">${ico('folder', 16)}</span><span><b>Back up often</b><span>Export a backup or turn on auto-backup from the storage chip.</span></span></div></div>
 <div class="wl-choices sp-in" style="animation-delay:.2s">
 <button class="wl-choice primary" data-w="scratch"><span class="ci">${ico('plus', 22)}</span><b>Start from scratch</b><span>A blank board, ready for anything. A short tour shows you around.</span><span class="arr">${ico('chev', 18)}</span></button>
 <button class="wl-choice" data-w="tpl"><span class="ci">${ico('template', 22)}</span><b>Start from a template</b><span>${BUILTIN.length} layouts for creatives, students, teachers, healthcare, developers and events.</span><span class="arr">${ico('chev', 18)}</span></button></div>
 <div class="wl-links sp-in" style="animation-delay:.25s"><button class="sp-link" data-w="explore">${ico('compass', 16)}<span>Explore the sample board</span></button><button class="sp-link" data-w="help">${ico('help', 16)}<span>How to use Tessera</span></button></div>
-<p class="wl-fine sp-in" style="animation-delay:.3s">By continuing, you understand that your boards are saved only in this browser on this device and aren’t synced anywhere.</p></div>`;
+<p class="wl-fine sp-in" style="animation-delay:.3s">By continuing, your boards are saved to your account and on this device.</p></div>`;
   document.body.appendChild(el); splashEl = el; requestAnimationFrame(() => el.classList.add('show'));
   const done = () => { S.meta.welcomed = true; saveSoon(false); try { navigator.storage?.persist?.(); } catch {} };
   el.addEventListener('click', e => {
@@ -9206,7 +9209,7 @@ async function init(){
   if (!storageOK) toast('Storage is blocked here — changes won’t be saved', {label:'Details', fn:() => storagePanel()}, 9000);
   await initAutoBackup();
   const showStart = S.meta.welcomed && !S.meta.splashOff && Date.now() - lastActiveAtLoad > AWAY;
-  if (!S.meta.welcomed) setTimeout(showWelcome, 200);
+  if (!S.meta.welcomed){ if (!window.__tessGate) setTimeout(showWelcome, 200); }
   else if (showStart) showSplash();
   else { setTimeout(dueReminder, 2400); backupNudge(); setTimeout(() => loadThumb(curId).then(u => { if (!u) captureThumb(curId); }), 3000); }
   touchActive();
@@ -9218,7 +9221,8 @@ async function init(){
 }
 /* ---------- bridge for cloud.js (accounts + cloud save) ---------- */
 window.__tessera = VIEWER ? null : {
-  S: () => S, cur: () => curId, toast, modal, esc, buildBackup, getImg: loadImg, putImg: imgPut,
+  S: () => S, cur: () => curId, welcome: showWelcome, toast,
+  async wipe(){ window.__tessWiped = true; clearTimeout(saveT); if (db){ await idbClear('img'); await idbClear('kv'); } }, modal, esc, buildBackup, getImg: loadImg, putImg: imgPut,
   bundle: bid => shareBundle(bid, true),
   idsOf: boards => { const o = new Set(); for (const b of Object.values(boards)) for (const c of Object.values(b.cards || {})) for (const k of cardImgIds(c)) o.add(k); return [...o]; },
   stateIds: st => { const o = new Set(), sc = cards => { for (const c of Object.values(cards || {})) for (const k of cardImgIds(c)) o.add(k); }, sb = b => { if (b){ sc(b.cards); if (b.coverId) o.add(b.coverId); } };
@@ -9232,7 +9236,6 @@ window.__tessera = VIEWER ? null : {
 init();
 })();
 </script>
-<script src="cloud-config.js"></script>
 <script src="cloud.js"></script>
 </body>
 </html>
