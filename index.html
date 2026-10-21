@@ -839,6 +839,15 @@ textarea.shd-in{height:84px;padding:10px 13px;resize:vertical;line-height:1.5}
 .field input.pass{text-align:center;font-size:20px;letter-spacing:.3em;font-variant-numeric:tabular-nums}
 .warnbox.soft{background:var(--hover-soft);border-color:var(--line-2);color:var(--text-2)}
 .arc-list{display:flex;flex-direction:column;gap:6px;max-height:min(56vh,460px);overflow:auto;margin:4px -4px 0;padding:2px 4px}
+.bch-new,.bch-row{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:12px 14px;border-radius:16px;border:1px solid var(--line);background:var(--hover-soft);color:var(--text);transition:transform .2s var(--ease),border-color .15s,background .15s}
+.bch-new{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.bch-new:hover,.bch-row:hover,.bch-new:focus-visible,.bch-row:focus-visible{border-color:var(--accent);transform:translateY(-1px);outline:none}
+.bch-ic{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;flex:none;background:var(--surface-2);font-size:18px}
+.bch-new .bch-ic{background:var(--accent);color:#16130a}
+.bch-m{display:flex;flex-direction:column;min-width:0;flex:1}.bch-m b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bch-m small{color:var(--text-3);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bch-go{color:var(--text-3)}.bch-row[hidden]{display:none}
+.bch-h{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-3);margin:18px 2px 8px}.bch-q{margin:0 0 10px}
+.bch-list{display:flex;flex-direction:column;gap:8px;max-height:min(46vh,360px);overflow:auto;padding:2px}
 .arc-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:var(--hover-soft)}
 .arc-ic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--surface);box-shadow:var(--shadow);font-size:20px;color:var(--accent);flex:none}
 .arc-m{flex:1;min-width:0}
@@ -893,7 +902,7 @@ textarea.shd-in{height:84px;padding:10px 13px;resize:vertical;line-height:1.5}
 .sp-main{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,1fr);gap:18px;margin-bottom:34px}
 .sp-continue{position:relative;display:flex;flex-direction:column;text-align:left;border-radius:24px;overflow:hidden;background:var(--surface);border:1px solid var(--line-2);box-shadow:var(--shadow);transition:transform .35s var(--ease),box-shadow .35s var(--ease),border-color .2s}
 .sp-continue:hover{transform:translateY(-3px);box-shadow:var(--shadow-lift);border-color:var(--accent)}
-.sp-continue .sp-thumb{aspect-ratio:16/8.5;border-radius:0;border:0;border-bottom:1px solid var(--line)}
+.sp-continue .sp-thumb{aspect-ratio:16/7;border-radius:0;border:0;border-bottom:1px solid var(--line)}
 .sp-cmeta{display:flex;align-items:center;gap:14px;padding:16px 20px 18px}
 .sp-cmeta .t{flex:1;min-width:0}
 .sp-eyebrow{display:block;font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-strong);margin-bottom:5px}
@@ -1679,7 +1688,9 @@ body.viewer #canvas.panning{cursor:grabbing}
 .sym-h{margin:14px 0 8px;font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}.sym-h:first-child{margin-top:4px}
 .sym-add{display:flex;gap:8px;margin:10px 0 2px}.sym-add input{flex:1;height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--line-2);background:var(--surface-2);color:var(--text);font:inherit;min-width:0}
 .sym-grid button.sym-mine{position:relative}.sym-mine u{position:absolute;top:2px;right:4px;font-size:13px;line-height:1;text-decoration:none;color:var(--text-3);opacity:0;cursor:pointer}.sym-mine:hover u{opacity:1}
-.sp-main:has(.sp-continue:only-child){grid-template-columns:1fr}
+.sp-main:has(.sp-continue:only-child){grid-template-columns:minmax(0,540px)}
+.sp-continue{max-width:640px}
+.sp-thumb img{image-rendering:auto}
 </style>
 </head>
 <body>
@@ -2024,8 +2035,23 @@ async function gcImages(){ if (!db) return; try { const used = usedImageIds();
 
 let saveT = 0;
 function saveSoon(changed = true){ if (VIEWER) return; clearTimeout(saveT); saveT = setTimeout(saveNow, 300); if (changed){ scheduleAutoBackup(); try { markVerDirty(); noteLocalChange(); markThumb(); if (curId && S.boards[curId]) S.boards[curId].editedAt = Date.now(); } catch {} } }
+/* Blank boards are never kept: a board with nothing on it is dropped once you leave it. */
+function pruneBlank(){
+  if (!S || VIEWER) return 0; let n = 0;
+  for (const pb of Object.values(S.boards)) for (const c of Object.values(pb.cards || {})){
+    if (c.type !== 'board') continue; const tb = S.boards[c.target];
+    if (!tb || !tb.seen || tb.id === S.rootId || tb.lock || Object.keys(tb.cards || {}).length) continue;
+    if (tb.id === curId && !splashEl) continue;
+    delete pb.cards[c.id]; pb.links = (pb.links || []).filter(l => l.from !== c.id && l.to !== c.id);
+    if (c.parent && pb.cards[c.parent]) pb.cards[c.parent].children = (pb.cards[c.parent].children || []).filter(x => x !== c.id);
+    delete S.boards[tb.id]; thumbMem.delete(tb.id); thumbDirty.delete(tb.id); kvDel('thumb:' + tb.id).catch(() => {}); n++;
+    if (S.meta.lastBoard === tb.id) S.meta.lastBoard = S.rootId;
+  }
+  return n;
+}
 async function saveNow(){
   clearTimeout(saveT); if (!db || window.__tessWiped) return;
+  if (pruneBlank()){ try { if (!S.boards[curId]) curId = S.rootId; if (!document.querySelector('#splash')) render(); } catch {} }
   try { S.meta.lastBoard = curId; await kvSet('state', S); updateDueBadge(); verTick(); try { window.__tessOnSave?.(); } catch {} }
   catch { toast('Couldn’t save — storage may be full. Export a backup.', {label:'Export', fn:exportBackup}, 7000); }
 }
@@ -2625,9 +2651,29 @@ function addCard(type, p, extra = {}, opts = {}){
   });
   return c;
 }
+/* Board tool: jump back into an earlier board, or start a fresh one right here. */
+async function boardChooser(p){
+  const arch = archivedIds(), here = new Set(); for (let b = S.boards[curId]; b; b = S.boards[b.parent]) here.add(b.id);
+  const list = Object.values(S.boards).filter(b => b.id !== curId && !arch.has(b.id) && Object.keys(b.cards).length)
+    .sort((a, b) => (b.editedAt || 0) - (a.editedAt || 0)).slice(0, 60);
+  const row = b => `<button class="bch-row" data-b="${b.id}"><span class="bch-ic">${b.icon ? esc(b.icon) : ico(b.lock ? 'lock' : 'board', 18)}</span><span class="bch-m"><b>${esc(b.id === S.rootId ? 'Home' : b.title)}</b><small>${esc(boardMeta(b))}</small></span><span class="bch-go">${ico('chev', 15)}</span></button>`;
+  const v = await modal({title:'Board', eyebrow:'Open a previous board or start a new one', cls:'wide',
+    html:`<button class="bch-new" data-n="1"><span class="bch-ic">${ico('plus', 18)}</span><span class="bch-m"><b>New board</b><small>A blank board, placed here on the canvas</small></span></button>${list.length ? `<div class="bch-h">Previous work</div><label class="field bch-q"><input placeholder="Search your boards" autocomplete="off" spellcheck="false"></label><div class="bch-list">${list.map(row).join('')}</div>` : ''}`,
+    actions:[{label:'Cancel', value:null}],
+    onOpen:ov => {
+      const q = ov.querySelector('.bch-q input');
+      q?.addEventListener('input', () => { const t = q.value.trim().toLowerCase(); ov.querySelectorAll('.bch-row').forEach(r => { r.hidden = !!t && !r.textContent.toLowerCase().includes(t); }); });
+      q?.addEventListener('keydown', e => { if (e.key === 'Enter'){ const f = [...ov.querySelectorAll('.bch-row')].find(r => !r.hidden); if (f){ e.preventDefault(); f.click(); } } });
+      ov.querySelector('.m-body').addEventListener('click', e => { const r = e.target.closest('[data-b],[data-n]'); if (r) ov._close(r.dataset.n ? {n:1} : {b:r.dataset.b}); });
+      setTimeout(() => (q || ov.querySelector('.bch-new')).focus({preventScroll:true}), 60);
+    }});
+  if (!v) return; if (v.b) return openBoard(v.b);
+  addCard('board', p);
+}
 async function createCard(type, p){
   p = p || centerWorld();
   if (type === 'image') return pickImages(p);
+  if (type === 'board') return boardChooser(p);
   if (type === 'link'){
     const url = await askLink(); if (!url) return; const v = parseVideo(url);
     if (v) addCard('video', p, {...v, title:''}, {edit:false}); else addCard('link', p, {url, title:''}, {edit:false}); return;
@@ -2867,8 +2913,9 @@ function openBoard(id){
   if (verDirty.has(curId)) saveVersion(curId);
   if (thumbDirty.has(curId)) captureThumb(curId);
   blurEditing(); hideMenus(); exitDrawMode(); stopAudio();
+  { const old = S.boards[curId]; if (old && old.id !== S.rootId && !old.lock && !Object.keys(old.cards).length && id !== old.id){ const prev = curId; setTimeout(() => { if (curId !== prev){ pruneBlank(); saveSoon(false); if (!splashEl) render(); } }, 500); } }
   const deeper = S.boards[id].parent === curId;
-  relockOutside(id); curId = id; sel.clear(); selLink = null; touchRecent(id);
+  relockOutside(id); curId = id; S.boards[id].seen = true; sel.clear(); selLink = null; touchRecent(id);
   const needFit = !cur().view.set;
   render(); if (needFit) fit(false);
   stage.classList.remove('in', 'out'); void stage.offsetWidth; stage.classList.add(deeper ? 'in' : 'out');
@@ -3379,7 +3426,7 @@ function openCardMenu(id, x, y, cell){
   sizeCommitted = false;
   if (!sel.has(id)){ sel.clear(); sel.add(id); selLink = null; updateSelectionUI(); }
   const c = findCard(id); if (!c) return; const ids = [...sel], items = [], free = freeSel();
-  if (!['image','swatch','video'].includes(c.type)) items.push({swatches:true, value:c.color, custom:c.type === 'sticky' || c.type === 'heading', onCustom:(x, y) => openCustomColor(ids, x, y), onPick:col => setColor(ids, col)}, {sep:true});
+  if (!['image','swatch','video'].includes(c.type)) items.push({swatches:true, value:c.color, custom:true, onCustom:(x, y) => openCustomColor(ids, x, y), onPick:col => setColor(ids, col)}, {sep:true});
   if (c.type === 'table' && ids.length === 1) tableMenuItems(c, cell).forEach(x => items.push(x));
   if (free.length >= 2){
     items.push({label:'Align', iconRow:[['alignL','Align left','l'],['alignC','Align centers','c'],['alignR','Align right','r'],['alignT','Align top','t'],['alignM','Align middles','m'],['alignB','Align bottom','b']].map(([icon, title, k]) => ({icon, title, fn:() => align(k)}))});
@@ -4033,10 +4080,10 @@ function strokePath(p){
   for (let i = 1; i < n - 1; i++){ const x = p[2 * i], y = p[2 * i + 1], nx = p[2 * i + 2], ny = p[2 * i + 3]; d += `Q${f(x)} ${f(y)} ${f((x + nx) / 2)} ${f((y + ny) / 2)}`; }
   return d + `L${f(p[2 * n - 2])} ${f(p[2 * n - 1])}`;
 }
-function strokesSVG(ss){ return ss.map(s => `<path class="sk-s ink-${INKS.includes(s.c) ? s.c : 'ink'}${s.t === 'hl' ? ' hl' : ''}" stroke-width="${+s.s || 3}" d="${strokePath(s.p || [])}"/>`).join(''); }
+function strokesSVG(ss){ return ss.map(s => `<path class="sk-s ink-${INKS.includes(s.c) ? s.c : 'ink'}${s.t === 'hl' ? ' hl' : ''}"${isHexCol(s.h) ? ` style="stroke:${s.h}"` : ''} stroke-width="${+s.s || 3}" d="${strokePath(s.p || [])}"/>`).join(''); }
 function drawTool(){ return S.meta.drawTool || (S.meta.drawTool = {t:'pen', c:'ink', s:4}); }
 function setDrawTool(o){ Object.assign(drawTool(), o); saveSoon(false); refreshDrawbar(); }
-drawbar.innerHTML = `<div class="db-g">${[['pen','pen','Pen (P)'],['hl','highlighter','Highlighter (H)'],['eraser','eraser','Eraser (E)']].map(([t, i, l]) => `<button data-t="${t}" title="${l}">${ico(i, 17)}</button>`).join('')}</div><span class="fsep"></span><div class="db-g">${INKS.map(k => `<button data-c="${k}" title="${k === 'ink' ? 'Ink' : cap(k)}"><i class="db-dot" style="background:var(--k-${k})"></i></button>`).join('')}</div><span class="fsep"></span><div class="db-g">${[2,4,8].map(s => `<button data-s="${s}" title="${s === 2 ? 'Fine' : s === 4 ? 'Medium' : 'Bold'}"><i class="db-size" style="width:${s + 3}px;height:${s + 3}px"></i></button>`).join('')}</div><span class="fsep"></span><button data-a="undo" title="Undo last stroke">${ico('undo', 16)}</button><button data-a="clear" title="Clear sketch">${ico('trash', 16)}</button><button data-a="done" class="db-done">Done</button>`;
+drawbar.innerHTML = `<div class="db-g">${[['pen','pen','Pen (P)'],['hl','highlighter','Highlighter (H)'],['eraser','eraser','Eraser (E)']].map(([t, i, l]) => `<button data-t="${t}" title="${l}">${ico(i, 17)}</button>`).join('')}</div><span class="fsep"></span><div class="db-g">${INKS.map(k => `<button data-c="${k}" title="${k === 'ink' ? 'Ink' : cap(k)}"><i class="db-dot" style="background:var(--k-${k})"></i></button>`).join('')}<button data-c="custom" title="Custom color…"><i class="db-dot db-custom" style="background:conic-gradient(from 0deg,#e5484d,#ea822e,#f5c542,#20a678,#3b8de0,#7c6cf0,#e2557a,#e5484d)"></i></button></div><span class="fsep"></span><div class="db-g">${[2,4,8].map(s => `<button data-s="${s}" title="${s === 2 ? 'Fine' : s === 4 ? 'Medium' : 'Bold'}"><i class="db-size" style="width:${s + 3}px;height:${s + 3}px"></i></button>`).join('')}</div><span class="fsep"></span><button data-a="undo" title="Undo last stroke">${ico('undo', 16)}</button><button data-a="clear" title="Clear sketch">${ico('trash', 16)}</button><button data-a="done" class="db-done">Done</button>`;
 function refreshDrawbar(){
   const t = drawTool();
   drawbar.querySelectorAll('[data-t]').forEach(b => b.classList.toggle('on', b.dataset.t === t.t));
@@ -4062,6 +4109,7 @@ drawbar.addEventListener('pointerdown', e => e.preventDefault());
 drawbar.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return; const c = drawingId && findCard(drawingId);
   if (b.dataset.t) setDrawTool({t:b.dataset.t});
+  else if (b.dataset.c === 'custom'){ const t0 = drawTool(); openHexPop(b, isHexCol(t0.h) ? t0.h : '#7c6cf0', h => { if (isHexCol(h)) setDrawTool({c:'custom', h, t:drawTool().t === 'eraser' ? 'pen' : drawTool().t}); }, 'Pen color'); }
   else if (b.dataset.c) setDrawTool({c:b.dataset.c, t:drawTool().t === 'eraser' ? 'pen' : drawTool().t});
   else if (b.dataset.s) setDrawTool({s:+b.dataset.s});
   else if (b.dataset.a === 'undo' && c && c.strokes.length){ commit(); c.strokes.pop(); redrawSketch(c); saveSoon(); }
@@ -4085,9 +4133,9 @@ function startStroke(e, el){
     const stop = track(e, erase, () => { gesture = null; if (changed){ pushPast(before); saveSoon(); } });
     gesture = {type:'stroke', cancel:() => { stop(); gesture = null; }}; return;
   }
-  const st = {c:t.c, s:t.t === 'hl' ? t.s * 4 : t.s, t:t.t === 'hl' ? 'hl' : 'pen', p:loc(e)};
+  const st = {c:t.c === 'custom' ? 'ink' : t.c, ...(t.c === 'custom' && isHexCol(t.h) ? {h:t.h} : {}), s:t.t === 'hl' ? t.s * 4 : t.s, t:t.t === 'hl' ? 'hl' : 'pen', p:loc(e)};
   const path = document.createElementNS(NS, 'path');
-  path.setAttribute('class', `sk-s ink-${st.c}${st.t === 'hl' ? ' hl' : ''}`); path.setAttribute('stroke-width', st.s); path.setAttribute('d', strokePath(st.p));
+  path.setAttribute('class', `sk-s ink-${st.c}${st.t === 'hl' ? ' hl' : ''}`); if (st.h) path.style.stroke = st.h; path.setAttribute('stroke-width', st.s); path.setAttribute('d', strokePath(st.p));
   g.appendChild(path); el.classList.remove('empty'); let raf = 0;
   const stop = track(e, ev => {
     const evs = ev.getCoalescedEvents?.() || [];
@@ -4368,25 +4416,29 @@ function customizeBoard(bid){
   modal({title:'Customize board', cls:'wide',
     html:`<div class="bc-wrap"><div class="bc-prev"><div class="tile"></div></div><div style="flex:1;min-width:0"><label class="field" style="margin-top:0"><input id="bc-name" value="${esc(tb.title)}" maxlength="80" spellcheck="false" aria-label="Board name"></label>
 <div class="lbl" style="margin-top:16px">Icon</div><div class="emoji-grid"><button data-e="" title="No icon">${ico('x', 14)}</button>${EMOJIS.map(e => `<button data-e="${e}">${e}</button>`).join('')}</div>
-${card ? `<div class="lbl">Color</div><div class="swatches" style="padding:2px 0 14px">${['', ...COLORS].map(k => `<button class="sw${k ? '' : ' none'}" ${k ? `data-color="${k}"` : ''} data-col="${k}" title="${k ? cap(k) : 'Default'}"></button>`).join('')}</div>` : ''}
+${card ? `<div class="lbl">Color</div><div class="swatches" style="padding:2px 0 14px">${['', ...COLORS].map(k => `<button class="sw${k ? '' : ' none'}" ${k ? `data-color="${k}"` : ''} data-col="${k}" title="${k ? cap(k) : 'Default'}"></button>`).join('')}<button class="sw sw-custom" data-col="custom" title="Custom color…"></button></div><div class="bc-hp" hidden style="padding:0 0 14px">${pickerHTML()}</div>` : ''}
 <div class="lbl">Cover</div><div class="row-btns"><button class="btn sm" data-cv="up">${ico('image', 14)}Upload a cover…</button><button class="btn sm" data-cv="rm">Remove cover</button></div></div></div>`,
     actions:[{label:'Cancel', value:null}, {label:'Save', kind:'primary', primary:true, fn:ov => ({name:ov.querySelector('#bc-name').value.trim()})}],
     onOpen: ov => {
       const prev = ov.querySelector('.bc-prev'), tile = prev.querySelector('.tile');
       const drawTile = async () => {
-        if (color) prev.dataset.color = color; else delete prev.dataset.color;
+        if (isHexCol(color)) paintHex(prev, color); else { prev.style.removeProperty('--tint'); prev.style.removeProperty('--ink'); if (color) prev.dataset.color = color; else delete prev.dataset.color; }
         tile.className = 'tile';
         const u = coverUrl || (coverId && !coverChanged ? await loadImg(coverId) : null);
         if (u){ tile.classList.add('cover'); tile.innerHTML = `<img alt="" src="${u}">`; }
         else tile.innerHTML = icon ? `<span class="bemoji">${esc(icon)}</span>` : ico('board', 32);
         ov.querySelectorAll('[data-e]').forEach(b => b.classList.toggle('on', b.dataset.e === icon));
-        ov.querySelectorAll('[data-col]').forEach(b => b.classList.toggle('on', (b.dataset.col || null) === color));
+        ov.querySelectorAll('[data-col]').forEach(b => { const cu = b.dataset.col === 'custom'; b.classList.toggle('on', cu ? isHexCol(color) : (b.dataset.col || null) === color); if (cu){ if (isHexCol(color)) b.style.setProperty('--cc', color); else b.removeAttribute('style'); } });
         ov.querySelector('[data-cv="rm"]').disabled = !u;
       };
       ov.querySelector('.m-body').addEventListener('click', async e => {
         const em = e.target.closest('[data-e]'), co = e.target.closest('[data-col]'), cv = e.target.closest('[data-cv]');
         if (em){ e.preventDefault(); icon = em.dataset.e; drawTile(); }
-        else if (co){ e.preventDefault(); color = co.dataset.col || null; drawTile(); }
+        else if (co && co.dataset.col === 'custom'){
+          e.preventDefault(); const box = ov.querySelector('.bc-hp'); box.hidden = !box.hidden;
+          if (!box.hidden && !box._pk){ box._pk = mountPicker(box.firstElementChild.parentElement, isHexCol(color) ? color : '#7c6cf0', h => { color = normHex(h); drawTile(); }); if (!isHexCol(color)){ color = box._pk.get(); drawTile(); } }
+        }
+        else if (co){ e.preventDefault(); color = co.dataset.col || null; ov.querySelector('.bc-hp')?.setAttribute('hidden', ''); drawTile(); }
         else if (cv?.dataset.cv === 'rm'){ e.preventDefault(); coverUrl = null; coverChanged = true; drawTile(); }
         else if (cv?.dataset.cv === 'up'){
           e.preventDefault(); const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
@@ -6270,7 +6322,7 @@ function captureThumb(bid = curId){
   const b = S.boards[bid]; if (!b || b.lock) return Promise.resolve();
   if (!Object.keys(b.cards).length){ thumbMem.delete(bid); thumbDirty.delete(bid); return kvDel('thumb:' + bid).catch(() => {}); }
   thumbBusy = true; thumbDirty.delete(bid);
-  const opt = {scale:1, maxPx:720, pad:36, bg:'board', silent:true}, jl = rasterize({...opt, theme:'light'}), jd = rasterize({...opt, theme:'dark'});
+  const opt = {scale:1, maxPx:1440, pad:36, bg:'board', silent:true}, jl = rasterize({...opt, theme:'light'}), jd = rasterize({...opt, theme:'dark'});
   return Promise.all([jl, jd]).then(async ([l, d]) => {
     if (!l || !d) return; const rec = {light:l.canvas.toDataURL('image/webp', .82), dark:d.canvas.toDataURL('image/webp', .82), at:Date.now()};
     thumbMem.set(bid, rec); await kvSet('thumb:' + bid, rec);
@@ -6291,7 +6343,7 @@ window.addEventListener('pagehide', touchActive);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') touchActive(); });
 const LOGO = (s = 26, id = 'lg' + uid()) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b9adff"/><stop offset="1" stop-color="#6450ea"/></linearGradient></defs><rect x="2" y="2" width="9" height="12" rx="2.6" fill="url(#${id})"/><rect x="13" y="2" width="9" height="7" rx="2.6" fill="url(#${id})" opacity=".55"/><rect x="2" y="16" width="9" height="6" rx="2.6" fill="url(#${id})" opacity=".35"/><rect x="13" y="11" width="9" height="11" rx="2.6" fill="url(#${id})" opacity=".8"/></svg>`;
 let splashEl = null, splashKey = null;
-const greeting = () => { const h = new Date().getHours(); return h < 5 ? 'Working late' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; };
+const greeting = () => { const h = new Date().getHours(), n = (window.__tessUser?.() || '').trim(); return (h < 5 ? 'Working late' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening') + (n ? ', ' + n : ''); };
 function thumbHTML(b){
   if (!b) return '';
   if (b.lock && !unlockedB.has(b.id)) return `<div class="sp-thumb"><span class="lk">${ico('lock', 22)}Locked</span></div>`;
@@ -6319,7 +6371,7 @@ function showSplash(){
   const el = document.createElement('div'); el.id = 'splash'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Start screen');
   el.innerHTML = `<div class="sp-glow"></div><div class="sp-dots"></div><div class="sp-wrap">
 <header class="sp-top sp-in"><div class="sp-brand">${LOGO(30)}Tessera</div><div class="sp-top-r"><button class="sp-link" data-a="help">${ico('help', 16)}<span>How to use Tessera</span></button><button class="ib" data-a="theme" title="Switch theme">${ico(isDark() ? 'sun' : 'moon', 17)}</button></div></header>
-<section class="sp-hero sp-in" style="animation-delay:.05s"><div><div class="sp-greet">${greeting()}</div><h1 class="sp-h">Pick up where you left off</h1></div>
+<section class="sp-hero sp-in" style="animation-delay:.05s"><div><div class="sp-greet">${esc(greeting())}</div><h1 class="sp-h">Pick up where you left off</h1></div>
 <div class="sp-actions"><button class="sp-act primary" data-a="new"><span class="ai">${ico('plus', 16)}</span>New board</button><button class="sp-act" data-a="tpl"><span class="ai">${ico('template', 16)}</span>From a template</button><button class="sp-act" data-a="import"><span class="ai">${ico('upload', 16)}</span>Import</button><button class="sp-act" data-a="search"><span class="ai">${ico('search', 16)}</span>Search<kbd>Ctrl K</kbd></button></div></section>
 <div class="sp-main sp-in" style="animation-delay:.1s"><button class="sp-continue" data-b="${lastId}">${thumbHTML(last)}<div class="sp-cmeta"><div class="t"><span class="sp-eyebrow">Continue</span><b>${esc(lastId === S.rootId ? 'Home' : last.title)}</b><small>${esc(boardMeta(last))}</small></div><span class="sp-go">Open<kbd>Enter</kbd></span></div></button>
 ${notes.length ? `<div class="sp-side">${notes.join('')}</div>` : ''}</div>
@@ -6998,7 +7050,7 @@ function tableSVG(shape, w, d, n, st, seatSt){
 }
 function itemSVG(it, sel){
   const L = PLAN_LIB[it.k] || [it.label || 'Item', it.w, it.d, 'Home'], kind = L[4] || 'box', w = it.w, d = it.d, hw = w / 2, hd = d / 2;
-  const tint = `var(--k-${it.color || CAT_TINT[L[3]] || 'slate'})`, fill = `color-mix(in srgb,${tint} 18%,var(--surface))`, st = `stroke="${tint}" stroke-width="0.03" fill="${fill}"`;
+  const tint = tintCss(it.color || CAT_TINT[L[3]] || 'slate'), fill = `color-mix(in srgb,${tint} 18%,var(--surface))`, st = `stroke="${tint}" stroke-width="0.03" fill="${fill}"`;
   let g = '';
   const R = (x, y, ww, hh, r = 0.05, extra = '') => `<rect x="${fx(x)}" y="${fx(y)}" width="${fx(ww)}" height="${fx(hh)}" rx="${r}" ${extra || st}/>`;
   const C = (x, y, r, extra = '') => `<circle cx="${fx(x)}" cy="${fx(y)}" r="${fx(r)}" ${extra || st}/>`;
@@ -7046,7 +7098,7 @@ function itemSVG(it, sel){
 }
 function planInner(p, o = {}){
   const u = p.unit || 'm', S = o.sel instanceof Set ? o.sel : new Set(o.sel ? [o.sel] : []), on = id => S.has(id); let s = '';
-  for (const r of p.rooms || []){ const pts = r.pts.map(q => q.map(fx).join(',')).join(' '), tint = `var(--k-${r.color || 'sky'})`;
+  for (const r of p.rooms || []){ const pts = r.pts.map(q => q.map(fx).join(',')).join(' '), tint = tintCss(r.color || 'sky');
     s += `<g class="pl-room" data-id="${r.id}"><polygon points="${pts}" fill="color-mix(in srgb,${tint} 10%,transparent)" stroke="${on(r.id) ? 'var(--accent)' : o.hit ? 'transparent' : 'none'}" stroke-width="${on(r.id) ? .05 : .25}" ${on(r.id) ? 'stroke-dasharray="0.15 0.1"' : ''} style="pointer-events:${o.hit ? 'stroke' : 'none'}"/></g>`; }
   for (const it of p.items || []) if (!isOpeningItem(it)) s += itemSVG(it, on(it.id));
   for (const w of p.walls || []){
@@ -7054,7 +7106,7 @@ function planInner(p, o = {}){
     s += `<g class="pl-wall" data-id="${w.id}">${o.hit ? `<path d="${wallPath(w)}" stroke="transparent" stroke-width="${Math.max(t, .45)}" fill="none"/>` : ''}<path d="${wallPath(w)}" stroke="${col}" stroke-width="${t}" fill="none" stroke-linecap="${w.b ? 'round' : 'square'}"${kind === 'rail' ? ' stroke-dasharray="0.2 0.12"' : ''}/></g>`;
   }
   for (const it of p.items || []) if (isOpeningItem(it)) s += itemSVG(it, on(it.id));
-  for (const r of p.rooms || []){ const [mx, my] = polyCenter(r.pts), tint = `var(--k-${r.color || 'sky'})`;
+  for (const r of p.rooms || []){ const [mx, my] = polyCenter(r.pts), tint = tintCss(r.color || 'sky');
     s += `<g class="pl-rlab${o.hit ? '' : ' np'}" data-id="${r.id}" style="pointer-events:${o.hit ? 'auto' : 'none'};cursor:pointer"><text x="${fx(mx)}" y="${fx(my)}" text-anchor="middle" font-size="0.34" font-weight="700" fill="${tint}" stroke="var(--surface)" stroke-width="0.08" paint-order="stroke" style="font-family:var(--font)">${esc(r.name || 'Room')}</text><text x="${fx(mx)}" y="${fx(my + .4)}" text-anchor="middle" font-size="0.24" fill="var(--text-3)" stroke="var(--surface)" stroke-width="0.06" paint-order="stroke" style="font-family:var(--font)">${fmtArea(polyArea(r.pts), u)}</text></g>`; }
   if (o.dims) for (const w of p.walls || []){ const len = wallLength(w); if (len < .4) continue; const g = wallGeom(w), a = Math.atan2(w.y2 - w.y1, w.x2 - w.x1), side = g.b > 0 ? -1 : 1, nx = Math.sin(a) * .3 * side, ny = -Math.cos(a) * .3 * side, mx = g.hx, my = g.hy; let deg = a * 180 / Math.PI; if (deg > 90 || deg < -90) deg += 180;
     s += `<text x="${fx(mx + nx)}" y="${fx(my + ny)}" text-anchor="middle" dominant-baseline="middle" font-size="0.22" fill="var(--text-2)" transform="rotate(${fx(deg)} ${fx(mx + nx)} ${fx(my + ny)})" style="font-family:var(--font);pointer-events:none">${fmtLen(len, u)}</text>`; }
@@ -7171,7 +7223,7 @@ function openPlanEditor(id){
   const sideTabs = () => { ov.querySelectorAll('.pe-stabs button').forEach(b => b.classList.toggle('on', b.dataset.st === sideTab)); $o('.pe-libwrap').hidden = sideTab !== 'lib'; $o('.pe-lay').hidden = sideTab !== 'lay'; if (sideTab === 'lay' && !$o('.pe-lay').innerHTML) lays(); };
   /* properties */
   const inU = m => P.unit === 'ft' ? +(m * M2FT).toFixed(2) : +(+m).toFixed(2), frU = v => P.unit === 'ft' ? v / M2FT : v, ul = () => P.unit === 'ft' ? 'ft' : 'm';
-  const swHTML = (cur0, attr = 'data-rc') => `<div class="swatches pe-sw">${COLORS.map(cl => `<button class="sw${cur0 === cl ? ' on' : ''}" data-color="${cl}" ${attr}="${cl}" title="${cap(cl)}"></button>`).join('')}</div>`;
+  const swHTML = (cur0, attr = 'data-rc') => `<div class="swatches pe-sw">${COLORS.map(cl => `<button class="sw${cur0 === cl ? ' on' : ''}" data-color="${cl}" ${attr}="${cl}" title="${cap(cl)}"></button>`).join('')}<button class="sw sw-custom${isHexCol(cur0) ? ' on' : ''}" data-pc="${attr}" title="Custom color${isHexCol(cur0) ? ' · ' + cur0 : '…'}"${isHexCol(cur0) ? ` style="--cc:${cur0}"` : ''}></button></div>`;
   const btn = (a, icn, label, danger) => `<button class="btn sm" data-a="${a}"${danger ? ' style="color:var(--danger)"' : ''}>${ico(icn, 13)}${label}</button>`;
   const props = () => {
     const o = selObjs(), el = $o('.pe-props');
@@ -7367,6 +7419,12 @@ ${tab || kind === 'chairrow' ? `<div class="pe-row"><span>${kind === 'chairrow' 
   $o('.pe-props').addEventListener('click', e => {
     const a = e.target.closest('[data-a]')?.dataset.a, rc = e.target.closest('[data-rc]'), mc = e.target.closest('[data-mc]'), sg = e.target.closest('.pe-seg button');
     const s = selObjs()[0];
+    const pcb = e.target.closest('[data-pc]');
+    if (pcb){
+      const multi = pcb.dataset.pc === 'data-mc', targets = multi ? selObjs().filter(o => kindOf(o.id) !== 'wall' && kindOf(o.id) !== 'text') : (s ? [s] : []); if (!targets.length) return;
+      let pushed = false; openHexPop(pcb, isHexCol(targets[0].color) ? targets[0].color : '#7c6cf0', h => { if (!isHexCol(h)) return; if (!pushed){ push(); pushed = true; } targets.forEach(o => { o.color = h; }); draw(); }, 'Custom color', () => props());
+      return;
+    }
     if (rc && s){ push(); s.color = rc.dataset.rc; draw(); props(); return; }
     if (mc){ push(); selObjs().forEach(o => { if (kindOf(o.id) !== 'wall' && kindOf(o.id) !== 'text') o.color = mc.dataset.mc; }); draw(); props(); return; }
     if (sg && s){ const f = sg.parentElement.dataset.f, v = sg.dataset.v; push();
@@ -8288,7 +8346,8 @@ const CK_DATE = {short:{weekday:'short', month:'short', day:'numeric'}, long:{we
 const CK_FONTS = [['serif', 'Serif', 'var(--serif)'], ['sans', 'Sans', 'var(--font)'], ['mono', 'Mono', 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'], ['rounded', 'Rounded', "ui-rounded,'SF Pro Rounded','Nunito','Varela Round',var(--font)"]];
 function ckTz(c){ try { if (c.tz) new Intl.DateTimeFormat(undefined, {timeZone:c.tz}); return c.tz || undefined; } catch { return undefined; } }
 function clockParts(c, d = new Date()){
-  const tz = ckTz(c), show = c.show || 'both', o = {hour:'numeric', minute:'2-digit', hour12:!c.h24, timeZone:tz};
+  if (c.cust && Number.isFinite(c.cust.t)) d = new Date(c.cust.run ? c.cust.t + (Date.now() - c.cust.set) : c.cust.t);
+  const tz = c.cust ? undefined : ckTz(c), show = c.show || 'both', o = {hour:'numeric', minute:'2-digit', hour12:!c.h24, timeZone:tz};
   if (c.h24) o.hour = '2-digit'; if (c.sec) o.second = '2-digit';
   let time = '', ap = '';
   if (show !== 'date'){
@@ -8337,6 +8396,18 @@ async function clockZone(id){
     }}]});
   if (v == null) return; clockSet(id, 'tz', v || undefined);
 }
+const ckLocal = d => { const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+async function clockCustom(id){
+  const c = findCard(id); if (!c) return;
+  const cu = c.cust, base = cu ? new Date(cu.run ? cu.t + (Date.now() - cu.set) : cu.t) : new Date();
+  const v = await modal({title:'Set your own time & date', eyebrow:'Clock', html:`<p>Show any moment you like — a launch, a birthday, a deadline. It can keep ticking from there, or stay frozen.</p><label class="field"><input id="ck-dt" type="datetime-local" step="60" value="${ckLocal(base)}" style="color-scheme:dark"></label><label class="ck-run" style="display:flex;align-items:center;gap:10px;margin-top:12px;cursor:pointer;font-size:14px"><input id="ck-run" type="checkbox" ${!cu || cu.run ? 'checked' : ''} style="accent-color:var(--accent);width:16px;height:16px"><span>Keep the clock running from this time</span></label>`,
+    onOpen:ov => setTimeout(() => ov.querySelector('#ck-dt').focus(), 60),
+    actions:[{label:'Cancel', value:null}, {label:'Use real time', value:'real'}, {label:'Apply', kind:'primary', primary:true, fn:ov => {
+      const t = new Date(ov.querySelector('#ck-dt').value).getTime(); if (!Number.isFinite(t)){ toast('Pick a valid date and time'); return false; }
+      return {t, set:Date.now(), run:ov.querySelector('#ck-run').checked};
+    }}]});
+  if (v == null) return; clockSet(id, 'cust', v === 'real' ? undefined : v);
+}
 function clockMenuItems(c, id){
   return [
     {segment:{label:'Show', value:c.show || 'both', opts:[['time', 'Time'], ['date', 'Date'], ['both', 'Both']], pick:v => clockSet(id, 'show', v)}},
@@ -8346,6 +8417,7 @@ function clockMenuItems(c, id){
     {segment:{label:'Font', value:c.font ? '' : (c.ff || 'serif'), opts:CK_FONTS.map(f => [f[0], f[1]]), pick:v => { const cc = findCard(id); if (cc) delete cc.font; clockSet(id, 'ff', v); }}},
     {label:'More fonts…', icon:'font', kbd:c.font ? cleanFam(c.font.family) : '', fn:() => clockFontFlow(id)},
     {segment:{label:'Align', value:c.align || 'center', opts:[['left', 'Left'], ['center', 'Centre']], pick:v => clockSet(id, 'align', v)}},
+    {label:'Custom time & date…', icon:'clock', kbd:c.cust ? 'Custom' : 'Live', fn:() => clockCustom(id)},
     {label:'Time zone…', icon:'globe', kbd:c.tz ? c.tz.split('/').pop().replace(/_/g, ' ') : 'Local', fn:() => clockZone(id)},
     {label:c.title ? 'Edit label' : 'Add label', icon:'pen', fn:() => clockLabel(id)}
   ];
@@ -8448,6 +8520,12 @@ function placePop(pop, anchor){
   const r = anchor.getBoundingClientRect(); pop.classList.add('show'); const w = pop.offsetWidth, h = pop.offsetHeight;
   let x = clamp(r.left + r.width / 2 - w / 2, 8, innerWidth - w - 8), y = r.bottom + 8; if (y + h > innerHeight - 8) y = Math.max(8, r.top - h - 8);
   pop.style.left = x + 'px'; pop.style.top = y + 'px';
+}
+/* Shared custom-color popover: hex field, spectrum and (where supported) the screen eyedropper. */
+function openHexPop(anchor, start, onInput, title = 'Custom color', onDone){
+  hideMenus?.(); fpop._kind = 'hexpop'; fpop.innerHTML = `<div class="fp-h">${esc(title)}</div>${pickerHTML()}`;
+  const root = fpop.querySelector('.hp').parentElement; const pk = mountPicker(root, normHex(start) || '#7c6cf0', onInput);
+  root.addEventListener('hp-done', () => onDone?.(pk.get())); placePop(fpop, anchor); return pk;
 }
 function openFmtPop(kind, anchor){
   if (fpop.classList.contains('show') && fpop._kind === kind){ closeFpop(); return; }
@@ -8714,7 +8792,7 @@ function paletteActions(){
   a.push({label:'Group selection', icon:'select', kbd:'Ctrl G', run:groupSel}, {label:'Ungroup', icon:'select', kbd:'Ctrl ⇧ G', run:ungroupSel});
   RATIOS.filter(r => r[0] !== 'free').forEach(([k, l]) => a.push({label:`New frame · ${l}`, icon:'frame', run:() => addRatioFrame(k)}));
   a.push({label:'Renumber shots', icon:'list', run:renumberShots}, {label:'Arrange shots as a storyboard', icon:'tidy', run:arrangeStoryboard}, {label:'Export shot list (CSV)', icon:'download', run:exportShotCSV});
-  a.push({label:'Storage health check', icon:'database', run:healthCheck}, {label:'Archived boards', icon:'folder', run:openArchive});
+  a.push({label:'Storage health check', icon:'database', run:healthCheck});
   if (curId !== S.rootId) a.push(cur().lock ? {label:'Lock this board now', icon:'lock', run:() => lockNow(curId)} : {label:'Lock this board with a passcode…', icon:'lock', run:() => setBoardLock(curId)});
   if (curId !== S.rootId){
     a.push({label:'Go to Home', icon:'home', run:() => openBoard(S.rootId)});
@@ -9063,7 +9141,7 @@ function openMoreMenu(){
   const r = $('#moreBtn').getBoundingClientRect();
   const items = [{label:'Export & share…', icon:'share', kbd:'Ctrl E', fn:() => openExport()}, {label:'Import a board…', icon:'upload', fn:() => importBoardFile()}, {sep:true},
     {label:'Export backup', icon:'download', kbd:'Ctrl S', fn:exportBackup}, {label:'Import backup…', icon:'upload', fn:importBackup},
-    {label:'Storage & backup', icon:'database', fn:() => storagePanel()}, {label:'Archived boards', icon:'folder', kbd:(S.archive || []).length ? String(S.archive.length) : '', fn:openArchive}, {label:'Storage health check', icon:'database', fn:healthCheck}, {sep:true},
+    {label:'Storage & backup', icon:'database', fn:() => storagePanel()}, {label:'Storage health check', icon:'database', fn:healthCheck}, {sep:true},
     {label:'Appearance…', icon:'palette', fn:openAppearance}, {label:'Customize dock & view…', icon:'dock', fn:customizeDock}, {sep:true},
     {label:'How to use Tessera', icon:'help', kbd:'?', fn:() => openHelp()}, {label:'Keyboard shortcuts', icon:'keyboard', fn:shortcuts}];
   if (curId !== S.rootId) items.push({sep:true}, {label:'Delete this board…', icon:'trash', danger:true, fn:deleteThisBoard});
