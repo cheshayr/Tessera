@@ -160,6 +160,26 @@ function paint() {
   const col = !status || status === 'Saved' ? '#2fbf71' : /Saving|Syncing|Loading|Unsaved/.test(status) ? '#e8a93a' : '#d6455d';
   b.innerHTML = `<i class="cl-dot" style="background:${col}"></i>${T.esc(status || 'Saved')}`; b.title = 'Click to save now';
 }
+function addButton() {
+  const st = document.createElement('style');
+  st.textContent = `#clDock{position:fixed;left:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:60;display:flex;gap:8px}
+#clBtn{height:34px;padding:0 14px;border-radius:12px;display:flex;align-items:center;gap:8px;font:inherit;font-weight:600;font-size:12.5px;color:var(--text);border:1px solid var(--line-2);cursor:pointer}
+.cl-dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.cl-f{display:grid;gap:10px;margin-top:6px}.cl-f input{height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--line-2);background:var(--surface-2);color:var(--text);font:inherit;width:100%;box-sizing:border-box}
+.cl-err{color:#d6455d;font-size:13px;min-height:18px;margin:6px 0 0}.cl-muted,.cl-sw{color:var(--text-3);font-size:13px}.cl-sw{background:none;border:0;cursor:pointer;color:var(--accent);padding:0;font:inherit;font-size:13px;margin-top:8px}
+.cl-sub{margin:16px 0 4px;font-size:13px;font-weight:600;color:var(--text-2)}.cl-acts{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 4px}
+.cl-proj{display:block;width:100%;text-align:left;padding:10px 12px;margin-top:6px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);color:var(--text);font:inherit;cursor:pointer}
+.cl-proj:hover{border-color:var(--accent)}.cl-proj small{display:block;color:var(--text-3);margin-top:2px}.cl-list{max-height:45vh;overflow:auto}
+.cl-lab{font-size:12px;font-weight:600;color:var(--text-3);margin-top:6px}.cl-line{display:flex;gap:8px}.cl-line input{flex:1;min-width:0}.cl-msg{min-height:18px;font-size:13px;margin:8px 0 0}
+.cl-pill{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:999px;font-size:10.5px;font-weight:600;background:var(--accent);color:#fff;vertical-align:middle}`;
+  document.head.appendChild(st);
+  const d = document.createElement('div'); d.id = 'clDock';
+  d.innerHTML = '<button id="clBtn" class="glass"></button>';
+  document.body.appendChild(d); paint();
+  d.querySelector('#clBtn').onclick = async () => { clearTimeout(pushT); pushT = 0; await push(); T.toast(status === 'Saved' ? 'Saved to your account' : 'Couldn’t save. Check your connection.'); };
+  const pj = document.getElementById('clProj'); if (pj) pj.onclick = openProjects;
+  new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.id === 'splash') decorateHome(n); }).observe(document.body, { childList: true });
+}
 function showGate(mode = 'in') {
   const up = mode === 'up', f = (n, t, p) => `<input name="${n}" type="${t}" placeholder="${p}" autocomplete="${n === 'password' || n === 'confirm' ? (up ? 'new-password' : 'current-password') : n === 'email' ? 'email' : 'username'}">`;
   const g = card(`<h1>${up ? 'Create your account' : 'Welcome to Tessera'}</h1>
