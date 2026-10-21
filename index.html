@@ -13,6 +13,10 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tessera">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" crossorigin>
@@ -6374,6 +6378,8 @@ function showSplash(){
   const card = b => `<button class="sp-card" data-b="${b.id}">${thumbHTML(b)}<div class="ct"><b>${esc(b.id === S.rootId ? 'Home' : b.title)}</b><small>${esc(boardMeta(b))}</small></div></button>`;
   const due = updateDueBadge() || {over:0, today:0, soon:0}, lastB = lastBackupAt(), bdays = lastB ? Math.floor((Date.now() - lastB) / DAY) : null;
   const notes = [];
+  { let dis = false; try { dis = localStorage.getItem('tessera-install-dismissed') === '1'; } catch {}
+    if (TOUCHY && !dis && !isInstalled()) notes.push(`<div class="sp-note sp-install"><button class="sp-note-in" data-a="install" style="display:flex;align-items:center;gap:12px;flex:1;text-align:left;min-width:0"><span class="ni">${ico('download', 18)}</span><span class="nm"><b>Install Tessera</b><span>Add it to your home screen — full screen, works offline</span></span></button><button class="ib" data-a="install-x" title="Not now" aria-label="Dismiss">${ico('x', 14)}</button></div>`); }
   if (due.over || due.today) notes.push(`<button class="sp-note ${due.over ? 'bad' : ''}" data-a="due"><span class="ni">${ico('calendar', 18)}</span><span class="nm"><b>${[due.over && `${due.over} overdue`, due.today && `${due.today} due today`].filter(Boolean).join(' · ')}</b><span>Open your Due soon list</span></span></button>`);
   else if (due.soon) notes.push(`<button class="sp-note" data-a="due"><span class="ni">${ico('calendar', 18)}</span><span class="nm"><b>${due.soon} due tomorrow</b><span>Open your Due soon list</span></span></button>`);
   const tips = ['Press <b>Ctrl K</b> anywhere to search every board or run any command.', 'Drag a card onto a board tile to move it inside.', `${TOUCHY ? 'Long-press' : 'Right-click'} the dock to choose your own tools.`, 'Frames become slides — press <b>P</b> to present.', 'Double-click the canvas to write a quick note.', 'Hold <b>Alt</b> while dragging to skip snapping.', 'Press <b>?</b> for the full guide and FAQ.'];
@@ -6395,6 +6401,8 @@ ${mine.length ? `<div class="sp-in" style="animation-delay:.15s"><div class="sp-
     if (!a) return;
     if (a === 'theme'){ toggleTheme(); setTimeout(() => { const b = el.querySelector('[data-a=theme]'); if (b) b.innerHTML = ico(isDark() ? 'sun' : 'moon', 17); el.querySelectorAll('[data-th]').forEach(async t => { const u = await loadThumb(t.dataset.th), img = t.querySelector('img'); if (u && img) img.src = u; }); }, 80); return; }
     if (a === 'help'){ openHelp(); return; }
+    if (a === 'install'){ installApp(); return; }
+    if (a === 'install-x'){ try { localStorage.setItem('tessera-install-dismissed', '1'); } catch {} el.querySelector('.sp-install')?.remove(); return; }
     hideSplash(() => {
       if (a === 'due') openDueSoon();
       else if (a === 'backup') exportBackup();
