@@ -1,6 +1,6 @@
 // Tessera service worker — makes the app installable and fully usable offline.
 // Bump VERSION whenever you publish changes so installed copies update.
-const VERSION = 'tessera-v22';
+const VERSION = 'tessera-v23';
 const RUNTIME = VERSION + '-rt';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './cloud.js', './cloud-config.js'];
 
