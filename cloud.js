@@ -52,7 +52,7 @@ function card(inner) {
   sb = window.supabase.createClient(C.url, C.anonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
   addButton();
   sb.auth.onAuthStateChange((ev, ses) => setTimeout(() => onSession(ses), 0));
-  window.__tessOnSave = schedulePush; window.__tessProfile = openProfile;
+  window.__tessUser = () => profile?.username || ''; window.__tessOnSave = schedulePush; window.__tessProfile = openProfile;
   document.addEventListener('visibilitychange', () => { if (document.hidden && pushT) { clearTimeout(pushT); pushT = 0; push(); } });
 })();
 
@@ -262,7 +262,7 @@ function openProfile() {
             const { data: free } = await sb.rpc('username_available', { p: name }); if (!free) return msg('That username is taken.');
             const { error } = await sb.from('profiles').update({ username: name }).eq('id', user.id);
             if (error) return msg('Couldn’t change it. Try again.');
-            profile = { ...profile, username: name }; ov.querySelector('.eyebrow').textContent = '@' + name; msg('Username updated.', true);
+            profile = { ...profile, username: name }; greetName(document.getElementById('splash')); ov.querySelector('.eyebrow').textContent = '@' + name; msg('Username updated.', true);
           } else if ('m' in b.dataset) {
             const email = val('email').trim();
             if (email === user.email) return msg('That’s already your email.');
@@ -287,7 +287,12 @@ function openProfile() {
     } }).then(v => { if (v === 'out') signOutFlow(); });
 }
 // Home screen extras: mark projects that have a share link, and list shared links this person opened.
+function greetName(el) {
+  const g = el?.querySelector('.sp-greet'), n = profile?.username; if (!g || !n) return;
+  g.textContent = g.textContent.replace(/,\s.*$/, '') + ', ' + n;
+}
 function decorateHome(el) {
+  greetName(el);
   if (!el || !user || el.dataset.cl) return; el.dataset.cl = 1;
   (async () => {
     const [{ data: mine }, { data: opened }] = await Promise.all([
