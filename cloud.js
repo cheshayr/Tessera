@@ -12,12 +12,31 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const toDataURL = blob => new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(blob); });
 const linkOf = t => location.href.split(/[#?]/)[0] + '#s=' + t;
 
+const root = document.documentElement;
+let gate = null;
+const unlock = () => { gate?.remove(); gate = null; root.classList.remove('cl-pending'); };
+function card(inner) {
+  if (!gate) { gate = document.createElement('div'); gate.id = 'clGate'; document.body.appendChild(gate); }
+  root.classList.add('cl-pending'); delete gate.dataset.loading;
+  gate.innerHTML = '<div class="cl-card"><img class="cl-logo" src="icon-192.png" alt="">' + inner + '</div>'; return gate;
+}
+(() => { const st = document.createElement('style');
+  st.textContent = `#clGate{position:fixed;inset:0;z-index:100000;display:grid;place-items:center;padding:20px;background:var(--bg);color:var(--text);overflow:auto;font-family:inherit}
+.cl-card{width:100%;max-width:380px;display:grid;gap:12px;text-align:center}.cl-card h1{margin:0;font-size:26px}.cl-card p{margin:0}
+.cl-logo{width:64px;height:64px;margin:0 auto;border-radius:16px}.cl-card .btn{height:42px;justify-content:center}`;
+  document.head.appendChild(st); card('<p class="cl-muted">Loading…</p>').dataset.loading = 1; })();
+
 (async () => {
   try {
     for (let i = 0; !window.__tessera && i < 150; i++) await sleep(100);
-    T = window.__tessera; if (!T) return;
+    T = window.__tessera; if (!T) throw 0;
     await new Promise((ok, no) => { const s = document.createElement('script'); s.src = LIB; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
-  } catch { return; }   // offline or blocked: Tessera keeps working locally
+  } catch {   // offline or blocked: let returning users in, otherwise ask them to reconnect
+    let had = false; try { had = Object.keys(localStorage).some(k => /^sb-.*-auth-token$/.test(k)); } catch {}
+    if (had) return unlock();
+    card('<h1>Can’t connect</h1><p class="cl-muted">Check your internet connection and try again.</p><button class="btn primary" id="clRetry">Retry</button>').querySelector('#clRetry').onclick = () => location.reload();
+    return;
+  }
   sb = window.supabase.createClient(C.url, C.anonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
   addButton();
   sb.auth.onAuthStateChange((ev, ses) => setTimeout(() => onSession(ses), 0));
@@ -28,9 +47,10 @@ const linkOf = t => location.href.split(/[#?]/)[0] + '#s=' + t;
 /* ---------- session ---------- */
 async function onSession(ses) {
   const u = ses?.user || null;
-  if (u?.id === user?.id) return paint();
+  if (!u) { user = null; profile = null; shares = []; status = ''; paint(); if (!gate || gate.dataset.loading) showGate('in'); return; }
+  unlock();
+  if (u.id === user?.id) return paint();
   user = u; profile = null; shares = [];
-  if (!user) { status = ''; return paint(); }
   const { data } = await sb.from('profiles').select('username').eq('id', user.id).maybeSingle(); profile = data;
   if (confirmedNow) T.toast('Email confirmed. Welcome!');
   await firstSync();
@@ -38,9 +58,11 @@ async function onSession(ses) {
 async function firstSync() {
   setStatus('Syncing…');
   const { data: r, error } = await sb.from('workspaces').select('updated_at').eq('owner', user.id).maybeSingle();
-  if (error) return setStatus('Offline');
-  if (!r) return push(true);
+  const pristine = !T.S().meta.welcomed;   // brand-new device: nothing of theirs here yet
+  if (error) { setStatus('Offline'); if (pristine) T.welcome(); return; }
+  if (!r) { await push(true); if (pristine) T.welcome(); return; }
   if (r.updated_at === ls('last:' + user.id, null)) { setStatus('Saved'); return schedulePush(); }
+  if (pristine) return pull();
   const useCloud = await T.modal({ title: 'Use your cloud boards?', eyebrow: 'Signed in',
     html: '<p>Your account already has saved boards. Load them here, or replace them with what’s on this device?</p><p>Export a backup first if you want to keep both.</p>',
     actions: [{ label: 'Keep this device', value: false }, { label: 'Load cloud copy', kind: 'primary', primary: true, value: true }] });
@@ -135,14 +157,30 @@ function addButton() {
   document.head.appendChild(st);
   const b = document.createElement('button'); b.id = 'clBtn'; b.className = 'glass'; b.onclick = openPanel; document.body.appendChild(b); paint();
 }
-function openAuth(mode = 'in') {
+function showGate(mode = 'in') {
   const up = mode === 'up', f = (n, t, p) => `<input name="${n}" type="${t}" placeholder="${p}" autocomplete="${n === 'password' || n === 'confirm' ? (up ? 'new-password' : 'current-password') : n === 'email' ? 'email' : 'username'}">`;
-  T.modal({ title: up ? 'Create your account' : 'Sign in', eyebrow: 'Tessera cloud', cls: 'cl-modal',
-    html: `<div class="cl-f">${up ? f('email', 'email', 'Email') + f('username', 'text', 'Username (3–20 letters, numbers, _)') + f('password', 'password', 'Password (8+ characters)') + f('confirm', 'password', 'Confirm password')
+  const g = card(`<h1>${up ? 'Create your account' : 'Welcome to Tessera'}</h1>
+    <p class="cl-muted">${up ? 'Your boards are saved to your account and follow you to any device.' : 'Sign in to open your boards.'}</p>
+    <div class="cl-f">${up ? f('email', 'email', 'Email') + f('username', 'text', 'Username (3–20 letters, numbers, _)') + f('password', 'password', 'Password (8+ characters)') + f('confirm', 'password', 'Confirm password')
       : f('id', 'text', 'Username or email') + f('password', 'password', 'Password')}</div><p class="cl-err" id="clErr"></p>
-      <button class="cl-sw" data-sw>${up ? 'Already have an account? Sign in' : 'New here? Create an account'}</button>`,
-    actions: [{ label: 'Cancel', value: null }, { label: up ? 'Create account' : 'Sign in', kind: 'primary', primary: true, fn: ov => { submit(ov, up); return false; } }],
-    onOpen: ov => { ov.querySelector('[data-sw]').onclick = () => { ov._close(null); openAuth(up ? 'in' : 'up'); }; setTimeout(() => ov.querySelector('input')?.focus(), 60); } });
+    <button class="btn primary" id="clGo">${up ? 'Create account' : 'Sign in'}</button>
+    <button class="cl-sw" data-sw>${up ? 'Already have an account? Sign in' : 'New here? Create an account'}</button>`);
+  g._close = unlock;
+  g.querySelector('#clGo').onclick = () => submit(g, up);
+  g.querySelector('[data-sw]').onclick = () => showGate(up ? 'in' : 'up');
+  g.querySelectorAll('input').forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') g.querySelector('#clGo').click(); }));
+  setTimeout(() => g.querySelector('input')?.focus(), 60);
+}
+function gateNotice(email) {
+  const g = card(`<h1>Check your email</h1><p class="cl-muted">We sent a confirmation link to <b>${T.esc(email)}</b>. Open it to activate your account, then sign in.</p><button class="btn primary" id="clBack">Back to sign in</button>`);
+  g.querySelector('#clBack').onclick = () => showGate('in');
+}
+async function signOutFlow() {
+  clearTimeout(pushT); pushT = 0;
+  if (status !== 'Saved') await push();
+  if (status !== 'Saved' && !(await T.modal({ title: 'Sign out without saving?', html: '<p>Your latest changes couldn’t be saved to the cloud. Signing out erases them from this device.</p>',
+    actions: [{ label: 'Stay signed in', value: false }, { label: 'Sign out', kind: 'danger', primary: true, value: true }] }))) return;
+  await sb.auth.signOut(); await T.wipe(); location.reload();   // the next person on this browser starts clean
 }
 async function submit(ov, up) {
   const v = (n, trim = true) => { const x = ov.querySelector(`[name=${n}]`)?.value ?? ''; return trim ? x.trim() : x; };
@@ -160,8 +198,7 @@ async function submit(ov, up) {
       const { data, error } = await sb.auth.signUp({ email, password, options: { data: { username }, emailRedirectTo: location.href.split(/[#?]/)[0] } });
       if (error) return err(error.message);
       if (data.user && data.user.identities?.length === 0) return err('That email is already registered. Try signing in.');
-      ov._close(null);
-      T.modal({ title: 'Check your email', html: `<p>We sent a confirmation link to <b>${T.esc(email)}</b>. Open it to activate your account, then sign in.</p>`, actions: [{ label: 'OK', kind: 'primary', primary: true }] });
+      gateNotice(email);
     } else {
       const id = v('id'); if (!id || !password) return err('Enter your username and password.');
       let r;
@@ -172,13 +209,13 @@ async function submit(ov, up) {
         r = await sb.auth.setSession(j.session);
       }
       if (r.error) return err(/confirm/i.test(r.error.message) ? 'Please confirm your email first.' : 'Invalid username or password.');
-      ov._close(true);
+      unlock();
     }
   } catch { err('Couldn’t reach the server. Check your connection.'); }
   finally { btn.disabled = false; }
 }
 async function openPanel() {
-  if (!user) return openAuth('in');
+  if (!user) return showGate('in');
   await loadShares().catch(() => {});
   const cur = T.S().boards[T.cur()], e = T.esc;
   const rows = shares.map(s => `<div class="cl-row"><div><b>${e(s.title)}</b><small>${e(linkOf(s.token))}</small></div><button class="btn" data-copy="${s.token}">Copy</button><button class="btn" data-upd="${e(s.board_id)}">Update</button><button class="btn" data-stop="${s.token}">Stop</button></div>`).join('') || '<p class="cl-muted">No shared links yet.</p>';
@@ -200,6 +237,6 @@ async function openPanel() {
         else if ('upd' in d) { b.textContent = '…'; await publish(d.upd); T.toast('Shared link updated'); again(); }
         else if ('stop' in d) { await unshare(d.stop); T.toast('Link turned off'); again(); }
       } catch (x) { console.warn(x); T.toast('Something went wrong. Try again.'); }
-    }) }).then(v => { if (v === 'out') sb.auth.signOut(); });
+    }) }).then(v => { if (v === 'out') signOutFlow(); });
 }
 })();
