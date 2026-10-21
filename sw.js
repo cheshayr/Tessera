@@ -1,6 +1,6 @@
 // Tessera service worker — makes the app installable and fully usable offline.
 // Bump VERSION whenever you publish changes so installed copies update.
-const VERSION = 'tessera-v21';
+const VERSION = 'tessera-v22';
 const RUNTIME = VERSION + '-rt';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './cloud.js', './cloud-config.js'];
 
@@ -21,16 +21,13 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // App files: serve from cache instantly, refresh in the background.
+  // App files: always ask the network first (so updates show up right away), fall back to the cache when offline.
   if (url.origin === location.origin) {
     e.respondWith(
-      caches.match(req, { ignoreSearch: true }).then(hit => {
-        const net = fetch(req).then(res => {
-          if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
-          return res;
-        }).catch(() => hit || caches.match('./index.html'));
-        return hit || net;
-      })
+      fetch(req, { cache: 'no-cache' }).then(res => {
+        if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
+        return res;
+      }).catch(() => caches.match(req, { ignoreSearch: true }).then(hit => hit || caches.match('./index.html')))
     );
     return;
   }
