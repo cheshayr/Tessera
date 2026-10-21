@@ -1,6 +1,12 @@
 Copyright (c) 2026 Jaimeson Evangelista. All rights reserved.
+Backend and cloud features (cloud.js, cloud-config.js, supabase/, SETUP.md
+and related changes) Copyright (c) 2026 Sophia Diaz. All rights reserved.
 
-No part of this software, including its source code, documentation, and
-related files, may be used, copied, modified, merged, published, distributed,
-sublicensed, sold, or otherwise exploited without the prior written permission
-of the copyright holder.
+This repository contains Tessera, created by Jaimeson Evangelista, together
+with modifications and additions (accounts, cloud save and view-only share
+links) made by Sophia Diaz with the permission of Jaimeson Evangelista.
+
+Except as stated above, no part of this software, including its source code,
+documentation, and related files, may be used, copied, modified, merged,
+published, distributed, sublicensed, sold, or otherwise exploited without the
+prior written permission of the copyright holders.
