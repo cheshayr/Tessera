@@ -5607,10 +5607,19 @@ function customizeDock(){
     return {on, off, n:cfg.items.length};
   };
   const seg = (k, opts, v) => `<div class="seg" data-k="${k}">${opts.map(([val, l]) => `<button data-v="${val}" class="${v === val ? 'on' : ''}">${l}</button>`).join('')}</div>`;
-  modal({title:'Customize dock', eyebrow:'Your tools, your order', cls:'dock-modal',
+  const viewRows = () => [['Background', 'bg', [['dots','Dots'],['grid','Grid'],['lines','Lines'],['plain','Plain']], cur().bg || 'dots'],
+    ['Layout', 'layout', [['free','Freeform'],['kanban','Kanban']], cur().kanban ? 'kanban' : 'free'],
+    ['Snapping', 'snap', [['guides','Guides'],['grid','Grid'],['off','Off']], S.meta.snap || 'guides'],
+    ...(innerWidth > 760 ? [['Minimap', 'minimap', [['on','Show'],['off','Hide']], S.meta.minimap === false ? 'off' : 'on']] : []),
+    ...(HAPTIC_OK ? [['Haptics', 'haptics', [['on','On'],['off','Off']], S.meta.haptics === false ? 'off' : 'on']] : [])]
+    .map(([l, k, o, v]) => `<div class="xp-row"><span>${l}</span>${seg(k, o, v)}</div>`).join('');
+  const viewPick = (k, v) => { if (k === 'bg') setBg(v); else if (k === 'layout') setKanban(v === 'kanban'); else if (k === 'snap'){ S.meta.snap = v; saveSoon(false); }
+    else if (k === 'minimap'){ S.meta.minimap = v === 'on'; drawMinimap(); saveSoon(false); } else if (k === 'haptics'){ S.meta.haptics = v === 'on'; saveSoon(false); } };
+  modal({title:'Customize dock & view', eyebrow:'Your tools, your layout', cls:'dock-modal',
     html:`<div class="dk-cols"><div><div class="dk-h">In your dock<i class="dk-n"></i></div><div class="dk-list on"></div></div><div><div class="dk-h">More card types</div><div class="dk-list off"></div></div></div>
 <div class="dk-opts"><div class="xp-row"><span>Position</span><div class="dk-pos"></div></div><div class="xp-row"><span>Labels</span><div class="dk-lab"></div></div></div>
-<p class="xp-note">Drag to reorder. The first five also show on phones; the rest live under More.</p><button class="dk-reset">Reset to default</button>`,
+<p class="xp-note">Drag to reorder. The first five also show on phones; the rest live under More.</p><button class="dk-reset">Reset to default</button>
+<div class="dk-h" style="margin-top:18px">View</div><div class="dk-opts dk-view"></div><p class="xp-note">Background and layout are saved per board. Hold Alt while dragging to skip snapping.</p>`,
     actions:[{label:'Done', kind:'primary', primary:true}],
     onOpen:ov => {
       const onL = ov.querySelector('.dk-list.on'), offL = ov.querySelector('.dk-list.off');
@@ -5618,13 +5627,14 @@ function customizeDock(){
         const r = rows(), cfg = dockCfg(); onL.innerHTML = r.on; offL.innerHTML = r.off; ov.querySelector('.dk-n').textContent = `${r.n}/${DOCK_MAX}`;
         ov.querySelector('.dk-pos').innerHTML = seg('pos', [['left', 'Left'], ['bottom', 'Bottom']], cfg.pos);
         ov.querySelector('.dk-lab').innerHTML = seg('labels', [['on', 'Show'], ['off', 'Hide']], cfg.labels ? 'on' : 'off');
+        ov.querySelector('.dk-view').innerHTML = viewRows();
       };
       ov.querySelector('.m-body').addEventListener('click', e => {
         const row = e.target.closest('.dk-row'), items = [...dockCfg().items];
         if (e.target.closest('[data-rm]')){ if (items.length <= 1){ toast('Keep at least one tool in the dock'); return; } setDock({items:items.filter(t => t !== row.dataset.t)}); draw(); sfx('tick'); return; }
         if (e.target.closest('[data-add]')){ if (items.length >= DOCK_MAX) return; setDock({items:[...items, row.dataset.t]}); draw(); sfx('pop'); return; }
         const sb = e.target.closest('.seg button');
-        if (sb){ const k = sb.parentElement.dataset.k; setDock(k === 'pos' ? {pos:sb.dataset.v} : {labels:sb.dataset.v === 'on'}); draw(); sfx('tick'); return; }
+        if (sb){ const k = sb.parentElement.dataset.k; if (k === 'pos' || k === 'labels') setDock(k === 'pos' ? {pos:sb.dataset.v} : {labels:sb.dataset.v === 'on'}); else viewPick(k, sb.dataset.v); draw(); sfx('tick'); return; }
         if (e.target.closest('.dk-reset')){ S.meta.dock = null; renderDock(); saveSoon(false); draw(); sfx('tick'); }
       });
       onL.addEventListener('pointerdown', e => {
@@ -9021,21 +9031,15 @@ async function eraseAll(){
 let deferredInstall = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; });
 function openMoreMenu(){
-  const r = $('#moreBtn').getBoundingClientRect(), tn = S.trash.length;
-  const dr = updateDueBadge() || {over:0, today:0, soon:0}, dn = dr.over + dr.today + dr.soon;
-  const items = [{label:'Search & commands', icon:'search', kbd:'Ctrl K', fn:() => openPalette()},
-    {label:'Due soon', icon:'calendar', badge:dn ? String(dn) : '', badgeOver:dr.over > 0, fn:openDueSoon},
-    {label:'Present', icon:'present', kbd:'P', fn:startPresentation},
-    {label:focusMode ? 'Leave focus mode' : 'Focus mode', icon:'focus', kbd:'⇧ F', fn:() => toggleFocus()}, {sep:true},
-    {label:'Export & share…', icon:'share', kbd:'Ctrl E', fn:() => openExport()}, {label:'Import a board…', icon:'upload', fn:() => importBoardFile()}, {label:'Version history', icon:'history', kbd:'Ctrl ⇧ H', fn:() => openVersions()}, {sep:true},
+  const r = $('#moreBtn').getBoundingClientRect();
+  const items = [{label:'Search & commands', icon:'search', kbd:'Ctrl K', fn:() => openPalette()}, {sep:true},
+    {label:'Export & share…', icon:'share', kbd:'Ctrl E', fn:() => openExport()}, {label:'Import a board…', icon:'upload', fn:() => importBoardFile()}, {sep:true},
     {label:'Export backup', icon:'download', kbd:'Ctrl S', fn:exportBackup}, {label:'Import backup…', icon:'upload', fn:importBackup},
-    {label:'Storage & backup', icon:'database', fn:() => storagePanel()}, {label:'Trash', icon:'trash', kbd:tn ? String(tn) : '', fn:openTrash}, {label:'Archived boards', icon:'folder', kbd:(S.archive || []).length ? String(S.archive.length) : '', fn:openArchive}, {label:'Storage health check', icon:'database', fn:healthCheck}, {sep:true},
-    {label:isDark() ? 'Light mode' : 'Dark mode', icon:isDark() ? 'sun' : 'moon', fn:() => toggleTheme()}, {label:'Appearance…', icon:'palette', fn:openAppearance}, {label:'Customize dock…', icon:'dock', fn:customizeDock},
-    {label:'View options…', icon:'sliders', fn:() => openViewMenu(r.right, r.bottom + 8, true)},
-    {label:'Templates…', icon:'template', kbd:'M', fn:() => openTemplates('new')}, {label:'Save board as template…', icon:'template', fn:() => saveAsTemplate()},
-    {label:'How to use Tessera', icon:'help', kbd:'?', fn:() => openHelp()}, {label:'Keyboard shortcuts', icon:'keyboard', fn:shortcuts}, {label:'Take the tour', icon:'compass', fn:startTour}, {label:'Start screen', icon:'home', fn:showSplash}];
-  if (deferredInstall) items.push({label:'Install app', icon:'install', fn:async () => { deferredInstall.prompt(); try { await deferredInstall.userChoice; } catch {} deferredInstall = null; }});
-  items.push({sep:true}, {label:'Erase everything…', icon:'trash', danger:true, fn:eraseAll});
+    {label:'Storage & backup', icon:'database', fn:() => storagePanel()}, {label:'Archived boards', icon:'folder', kbd:(S.archive || []).length ? String(S.archive.length) : '', fn:openArchive}, {label:'Storage health check', icon:'database', fn:healthCheck}, {sep:true},
+    {label:'Undo', icon:'undo', kbd:'Ctrl Z', fn:() => undo()}, {label:'Redo', icon:'redo', kbd:'Ctrl Y', fn:() => redo()}, {sep:true},
+    {label:'Appearance…', icon:'palette', fn:openAppearance}, {label:'Customize dock & view…', icon:'dock', fn:customizeDock}, {sep:true},
+    {label:'How to use Tessera', icon:'help', kbd:'?', fn:() => openHelp()}, {label:'Keyboard shortcuts', icon:'keyboard', fn:shortcuts}, {sep:true},
+    {label:'Erase everything…', icon:'trash', danger:true, fn:eraseAll}];
   openMenu(items, r.right, r.bottom + 8, true);
 }
 
@@ -9221,7 +9225,7 @@ async function init(){
 }
 /* ---------- bridge for cloud.js (accounts + cloud save) ---------- */
 window.__tessera = VIEWER ? null : {
-  S: () => S, cur: () => curId, welcome: showWelcome, toast,
+  S: () => S, cur: () => curId, welcome: showWelcome, open: id => openBoard(id), kids: id => { const o = new Set(); descendantsOf(id, o); o.add(id); return [...o]; }, toast,
   async wipe(){ window.__tessWiped = true; clearTimeout(saveT); if (db){ await idbClear('img'); await idbClear('kv'); } }, modal, esc, buildBackup, getImg: loadImg, putImg: imgPut,
   bundle: bid => shareBundle(bid, true),
   idsOf: boards => { const o = new Set(); for (const b of Object.values(boards)) for (const c of Object.values(b.cards || {})) for (const k of cardImgIds(c)) o.add(k); return [...o]; },
