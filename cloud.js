@@ -133,8 +133,8 @@ async function loadShares() {
   return (shares = data || []);
 }
 async function publish(bid) {
-  const { boards } = T.bundle(bid), ids = T.idsOf(boards), title = T.S().boards[bid].title;
-  const payload = { app: 'tessera', kind: 'share', v: 1, root: bid, title, boards };
+  const { boards, fonts } = T.bundle(bid), ids = [...new Set([...T.idsOf(boards), ...(fonts?.uploads || []).map(f => f.file)])], title = T.S().boards[bid].title;
+  const payload = { app: 'tessera', kind: 'share', v: 1, root: bid, title, boards, fonts };
   const { data, error } = await sb.from('shares').upsert({ owner: user.id, board_id: bid, title, data: payload, image_ids: ids }, { onConflict: 'owner,board_id' }).select('token').single();
   if (error) throw error;
   const have = new Set(ls('simgs:' + data.token, []));
