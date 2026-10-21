@@ -1675,6 +1675,11 @@ body.viewer #canvas.panning{cursor:grabbing}
 .vw-err h2{font-family:var(--serif);font-weight:400;font-size:28px;margin:0 0 8px;color:var(--text)}
 .vw-err p{color:var(--text-3);margin:0 0 20px;max-width:360px;line-height:1.55}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+.sym-tabs{width:100%}.sym-tabs button{flex:1}.sym-body{max-height:min(50vh,400px);overflow:auto;margin-top:6px;padding-right:4px}.sym-body .sym-grid{max-height:none;overflow:visible;margin-top:0}
+.sym-h{margin:14px 0 8px;font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}.sym-h:first-child{margin-top:4px}
+.sym-add{display:flex;gap:8px;margin:10px 0 2px}.sym-add input{flex:1;height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--line-2);background:var(--surface-2);color:var(--text);font:inherit;min-width:0}
+.sym-grid button.sym-mine{position:relative}.sym-mine u{position:absolute;top:2px;right:4px;font-size:13px;line-height:1;text-decoration:none;color:var(--text-3);opacity:0;cursor:pointer}.sym-mine:hover u{opacity:1}
+.sp-main:has(.sp-continue:only-child){grid-template-columns:1fr}
 </style>
 </head>
 <body>
@@ -1689,6 +1694,7 @@ body.viewer #canvas.panning{cursor:grabbing}
   <div class="vsep"></div>
   <nav id="crumbs" aria-label="Boards"></nav>
   <button class="ib pin" id="pinBtn" title="Pin this board"></button>
+  <button class="chip" id="clProj" hidden title="Save, share and open your projects"><span>Projects</span></button>
 </div>
 
 <div id="tr" class="bar glass">
@@ -2364,15 +2370,9 @@ function selectLink(id){ sel.clear(); selLink = id; updateSelectionUI(); }
 function selectAll(){ sel.clear(); const hid = hiddenIds(); Object.values(cur().cards).forEach(c => { if (!c.parent && !hid.has(c.id)) sel.add(c.id); }); updateSelectionUI(); }
 
 function renderCrumbs(){
-  const path = []; let b = cur();
-  while (b){ path.unshift(b); b = b.parent ? S.boards[b.parent] : null; }
-  const show = path.length > 4 ? [path[0], null, ...path.slice(-2)] : path;
-  $('#crumbs').innerHTML = show.map((x, i) => {
-    const sep = i ? `<span class="crumb-sep">${ico('chev',13)}</span>` : '';
-    if (!x) return sep + '<span class="crumb-ell">…</span>';
-    const isCur = x.id === curId, isRoot = x.id === S.rootId, isPrev = show[i + 1]?.id === curId;
-    return `${sep}<div class="crumb${isCur?' cur':''}${isPrev?' prev':''}" role="button" tabindex="0" data-b="${x.id}" title="${isCur?'Click to rename':'Open '+esc(x.title)}">${isPrev ? `<span class="cr-back">${ico('chev',14)}</span>` : ''}${isRoot ? ico('home',14) : x.icon ? `<span class="cr-emoji">${esc(x.icon)}</span>` : ''}<span>${esc(x.title)}</span></div>`;
-  }).join('');
+  const b = cur(), isRoot = b.id === S.rootId, par = b.parent ? S.boards[b.parent] : null;
+  $('#crumbs').innerHTML = (par && par.id !== S.rootId ? `<div class="crumb prev" role="button" tabindex="0" data-b="${par.id}" title="Back to ${esc(par.title)}"><span class="cr-back">${ico('chev',14)}</span></div>` : '')
+    + `<div class="crumb cur" role="button" tabindex="0" data-b="${b.id}" title="Click to rename">${isRoot ? ico('home',14) : b.icon ? `<span class="cr-emoji">${esc(b.icon)}</span>` : ''}<span class="cr-t">${esc(b.title)}</span></div>`;
   const pb = $('#pinBtn'), on = isPinned(curId);
   pb.hidden = curId === S.rootId; pb.classList.toggle('on', on);
   pb.innerHTML = ico(on ? 'starFill' : 'star', 17); pb.title = on ? 'Unpin this board' : 'Pin this board';
@@ -2391,14 +2391,14 @@ function touchRecent(id){ const r = S.meta.recent || (S.meta.recent = []); const
 const pinnedBoards = () => (S.meta.pinned || []).map(id => S.boards[id]).filter(Boolean);
 const recentBoards = () => (S.meta.recent || []).map(id => S.boards[id]).filter(b => b && b.id !== curId && !isPinned(b.id)).slice(0, 6);
 function openBoardsMenu(){
-  const r = $('#brand').getBoundingClientRect(), items = [{heading:'Pinned'}];
+  const r = $('#brand').getBoundingClientRect(), items = [{label:'Home', icon:'home', fn:() => showSplash()}];
+  if (window.__tessProfile) items.push({label:'Profile…', icon:'smile', fn:() => window.__tessProfile()});
+  items.push({sep:true}, {heading:'Pinned'});
   const pins = pinnedBoards();
   if (pins.length) pins.forEach(b => items.push({label:b.title, icon:'starFill', kbd:b.id === curId ? 'Here' : '', fn:() => openBoard(b.id)}));
   else items.push({note:'Star a board to pin it here'});
   const rec = recentBoards();
   if (rec.length){ items.push({heading:'Recent'}); rec.forEach(b => items.push({label:b.title, icon:b.id === S.rootId ? 'home' : 'clock', fn:() => openBoard(b.id)})); }
-  items.push({sep:true}, {label:'Search everything', icon:'search', kbd:'Ctrl K', fn:() => openPalette()});
-  if (curId !== S.rootId) items.push({label:'Go to Home', icon:'home', fn:() => openBoard(S.rootId)});
   openMenu(items, r.left, r.bottom + 8);
 }
 
@@ -6307,17 +6307,14 @@ function showSplash(){
   hideMenus(); closeDuePicker?.();
   const arch = archivedIds(), ok = id => S.boards[id] && !arch.has(id);
   const lastId = ok(S.meta.lastBoard) ? S.meta.lastBoard : S.rootId, last = S.boards[lastId];
-  const pins = (S.meta.pinned || []).filter(id => ok(id) && id !== lastId).slice(0, 8).map(id => S.boards[id]);
-  const recs = (S.meta.recent || []).filter(id => ok(id) && id !== lastId && !pins.some(p => p.id === id)).slice(0, 8).map(id => S.boards[id]);
-  if (lastId !== S.rootId && !recs.length && !pins.some(p => p.id === S.rootId)) recs.push(S.boards[S.rootId]);
+  const filled = b => [...descendantsOf(b.id)].some(i => Object.keys(S.boards[i]?.cards || {}).length);
+  const mine = Object.values(S.boards[S.rootId].cards).filter(c => c.type === 'board' && ok(c.target)).map(c => S.boards[c.target])
+    .filter(b => b.id === lastId || filled(b)).sort((a, b) => (b.editedAt || 0) - (a.editedAt || 0)).slice(0, 24);
   const card = b => `<button class="sp-card" data-b="${b.id}">${thumbHTML(b)}<div class="ct"><b>${esc(b.id === S.rootId ? 'Home' : b.title)}</b><small>${esc(boardMeta(b))}</small></div></button>`;
   const due = updateDueBadge() || {over:0, today:0, soon:0}, lastB = lastBackupAt(), bdays = lastB ? Math.floor((Date.now() - lastB) / DAY) : null;
   const notes = [];
   if (due.over || due.today) notes.push(`<button class="sp-note ${due.over ? 'bad' : ''}" data-a="due"><span class="ni">${ico('calendar', 18)}</span><span class="nm"><b>${[due.over && `${due.over} overdue`, due.today && `${due.today} due today`].filter(Boolean).join(' · ')}</b><span>Open your Due soon list</span></span></button>`);
   else if (due.soon) notes.push(`<button class="sp-note" data-a="due"><span class="ni">${ico('calendar', 18)}</span><span class="nm"><b>${due.soon} due tomorrow</b><span>Open your Due soon list</span></span></button>`);
-  if (backupDir && backupPerm === 'granted') notes.push(`<div class="sp-note ok"><span class="ni">${ico('folder', 18)}</span><span class="nm"><b>Auto-backup is on</b><span>Saving to “${esc(backupDir.name)}”</span></span></div>`);
-  else if (!lastB || bdays >= 7) notes.push(`<button class="sp-note warn" data-a="backup"><span class="ni">${ico('download', 18)}</span><span class="nm"><b>${lastB ? `Last backup ${bdays} days ago` : 'No backup yet'}</b><span>Export one now — it takes a second</span></span></button>`);
-  else notes.push(`<div class="sp-note ok"><span class="ni">${ico('check', 18)}</span><span class="nm"><b>Backed up ${relTime(lastB)}</b><span>Your boards are safe</span></span></div>`);
   const tips = ['Press <b>Ctrl K</b> anywhere to search every board or run any command.', 'Drag a card onto a board tile to move it inside.', `${TOUCHY ? 'Long-press' : 'Right-click'} the dock to choose your own tools.`, 'Frames become slides — press <b>P</b> to present.', 'Double-click the canvas to write a quick note.', 'Hold <b>Alt</b> while dragging to skip snapping.', 'Press <b>?</b> for the full guide and FAQ.'];
   const el = document.createElement('div'); el.id = 'splash'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Start screen');
   el.innerHTML = `<div class="sp-glow"></div><div class="sp-dots"></div><div class="sp-wrap">
@@ -6325,10 +6322,9 @@ function showSplash(){
 <section class="sp-hero sp-in" style="animation-delay:.05s"><div><div class="sp-greet">${greeting()}</div><h1 class="sp-h">Pick up where you left off</h1></div>
 <div class="sp-actions"><button class="sp-act primary" data-a="new"><span class="ai">${ico('plus', 16)}</span>New board</button><button class="sp-act" data-a="tpl"><span class="ai">${ico('template', 16)}</span>From a template</button><button class="sp-act" data-a="import"><span class="ai">${ico('upload', 16)}</span>Import</button><button class="sp-act" data-a="search"><span class="ai">${ico('search', 16)}</span>Search<kbd>Ctrl K</kbd></button></div></section>
 <div class="sp-main sp-in" style="animation-delay:.1s"><button class="sp-continue" data-b="${lastId}">${thumbHTML(last)}<div class="sp-cmeta"><div class="t"><span class="sp-eyebrow">Continue</span><b>${esc(lastId === S.rootId ? 'Home' : last.title)}</b><small>${esc(boardMeta(last))}</small></div><span class="sp-go">Open<kbd>Enter</kbd></span></div></button>
-<div class="sp-side">${notes.join('')}<div class="sp-tip"><b>Tip</b> · ${tips[Math.floor(Math.random() * tips.length)]}</div></div></div>
-${pins.length ? `<div class="sp-in" style="animation-delay:.15s"><div class="sp-sec">Pinned</div><div class="sp-cards">${pins.map(card).join('')}</div></div>` : ''}
-${recs.length ? `<div class="sp-in" style="animation-delay:.2s"><div class="sp-sec">Recent</div><div class="sp-cards">${recs.map(card).join('')}</div></div>` : ''}
-<footer class="sp-foot sp-in" style="animation-delay:.25s"><label class="sp-check"><input type="checkbox" id="sp-off"${S.meta.splashOff ? ' checked' : ''}>Don’t show this to me again</label><span>Press <kbd>Enter</kbd> to continue · <kbd>Esc</kbd> to close</span></footer></div>`;
+${notes.length ? `<div class="sp-side">${notes.join('')}</div>` : ''}</div>
+${mine.length ? `<div class="sp-in" style="animation-delay:.15s"><div class="sp-sec">All projects</div><div class="sp-cards">${mine.map(card).join('')}</div></div>` : ''}
+<footer class="sp-foot sp-in" style="animation-delay:.25s"><span>Press <kbd>Enter</kbd> to continue · <kbd>Esc</kbd> to close</span></footer></div>`;
   document.body.appendChild(el); splashEl = el;
   requestAnimationFrame(() => el.classList.add('show'));
   el.querySelectorAll('[data-th]').forEach(async t => { const u = await loadThumb(t.dataset.th); if (!u) return; const img = t.querySelector('img'); img.onload = () => { img.classList.add('ok'); t.querySelector('svg.pv')?.remove(); }; img.src = u; });
@@ -6345,7 +6341,6 @@ ${recs.length ? `<div class="sp-in" style="animation-delay:.2s"><div class="sp-s
       else atHome(() => { if (a === 'new') newBoardFlow(); else if (a === 'tpl') openTemplates('new'); else if (a === 'import') importBoardFile(); });
     });
   });
-  el.querySelector('#sp-off').addEventListener('change', e => { S.meta.splashOff = e.target.checked; saveSoon(false); });
   splashKey = e => {
     if (!splashEl || document.querySelector('.overlay')) return;
     const mod = e.ctrlKey || e.metaKey;
@@ -6368,7 +6363,7 @@ function hideSplash(then){
 function atHome(fn){ if (curId !== S.rootId){ openBoard(S.rootId); setTimeout(fn, 480); } else fn(); }
 function newBoardFlow(name = 'Untitled board'){
   const p = centerWorld(), c = addCard('board', p, {}, {edit:false}), tb = S.boards[c.target]; tb.title = name; saveSoon();
-  setTimeout(() => { openBoard(c.target); setTimeout(() => { const sp = $('#crumbs .crumb.cur span'); if (sp) inlineEdit(sp, tb.title, v => { tb.title = v; }); }, 520); }, 380);
+  setTimeout(() => { openBoard(c.target); setTimeout(() => { const sp = $('#crumbs .crumb.cur .cr-t'); if (sp) inlineEdit(sp, tb.title, v => { tb.title = v; }); }, 520); }, 380);
   return c.target;
 }
 
@@ -6758,14 +6753,39 @@ function pickShape(c0){
   return modal({title:'Shapes', eyebrow:'Add a shape', cls:'wide', html:`<div class="shape-grid">${Object.entries(SHAPES).map(([k, [l]]) => `<button data-s="${k}" title="${l}" class="${c0?.shape === k ? 'on' : ''}">${shapeSVG(k, 'fill="currentColor" fill-opacity=".14" stroke="currentColor" stroke-width="2" stroke-linejoin="round"')}</button>`).join('')}</div>`,
     actions:[{label:'Cancel', value:null}], onOpen:ov => ov.querySelector('.shape-grid').addEventListener('click', e => { const b = e.target.closest('[data-s]'); if (b) ov._close(b.dataset.s); })});
 }
+const SYM_GROUPS = [['Marks & status', ['check','xmark','warn','info','question','flag','thumb','tag','medal','trophy','target']], ['Nature & weather', ['sun','moon','cloud','rain','leaf','flame','bolt','sparkle','paw']],
+  ['People & feelings', ['heart','star','smile','user','users','eye','mail','phone','bell']], ['Places & travel', ['pin','home','car','plane','globe','key','lock']],
+  ['Things', ['camera','mic','music','film','bulb','gift','coffee','cake','cart','book','cap','steth','palette']], ['Business & tools', ['dollar','chart','clock','calendar','settings','wifi']], ['Arrows', ['arrowR','arrowU','refresh']]];
+const TEXT_SYMS = [['Stars & shapes', '★ ☆ ✦ ✧ ✪ ● ○ ◆ ◇ ■ □ ▲ △ ▼ ▽ ♠ ♣ ♥ ♦'], ['Weather & nature', '☀ ☁ ☂ ☃ ❄ ☾ ☽ ⚡ ✿ ❀ ❁ ☘ ♨'], ['Marks', '✓ ✔ ✗ ✘ ✚ ✖ ✱ ✳ ❖ ✎ ✂ ✉ ☎ ⚑ ⚙ ⌛ ☕'],
+  ['Arrows', '→ ← ↑ ↓ ↔ ↕ ➜ ➤ ➔ ⇒ ⇐ ⇨ ↩ ↪ ⟳'], ['Music & fun', '♪ ♫ ♬ ☺ ☻ ☮ ☯ ☸ ♻ ☠ ✌ ☝']];
+const EMOJI_GROUPS = [['Smileys & hands', '😀 😊 😍 🥳 😎 🤔 😅 😢 😴 👍 👏 🙌 🙏 💪 👀 🧠'], ['Hearts & marks', '❤️ 🧡 💛 💚 💙 💜 🖤 ✅ ❌ ⚠️ ⭐ ✨ 🔥 💯 ❓ ❗'], ['Objects & work', '💡 📌 📍 📅 ⏰ 💬 📷 🎬 🎵 🎨 📚 💼 🎓 ✏️ 💰 📈'],
+  ['Places & travel', '🏠 ✈️ 🚗 🚀 🗺️ 🏖️ ⛰️ 🌍 🏆 🎯 🎉 🎁'], ['Food & drink', '☕ 🍽️ 🍕 🍔 🍰 🎂 🍎 🥗 🍜 🍣 🍷 🧋'], ['Nature & animals', '🌿 🌸 🌻 ☀️ 🌙 ⚡ 🌈 🐶 🐱 🐻 🦋 🐝'], ['Health & science', '🩺 💊 🧪 🔬 🧬 🏃 🧘']];
 function pickSymbol(){
-  return modal({title:'Symbols', eyebrow:'Icons & emoji', cls:'wide', html:`<label class="field" style="margin-top:0"><input id="sym-q" placeholder="Search symbols, or paste any emoji" autocomplete="off"></label><div class="sym-grid"></div>`,
+  const mine = () => S.meta.textSymbols || (S.meta.textSymbols = []);
+  return modal({title:'Symbols', eyebrow:'Icons, text symbols & emoji', cls:'wide',
+    html:`<div class="seg sym-tabs"><button data-t="icons" class="on">Icons</button><button data-t="text">Text symbols</button><button data-t="emoji">Emoji</button></div>
+<label class="field sym-q-wrap" style="margin-top:10px"><input id="sym-q" autocomplete="off"></label>
+<div class="sym-add" hidden><input id="sym-new" maxlength="8" placeholder="Type or paste a symbol, like ♡ ☆ ✿" autocomplete="off"><button class="btn" id="sym-addbtn">Add text symbol</button></div><div class="sym-body"></div>`,
     actions:[{label:'Cancel', value:null}], onOpen:ov => {
-      const g = ov.querySelector('.sym-grid'), q = ov.querySelector('#sym-q');
-      const draw = () => { const v = q.value.trim().toLowerCase(); const emo = /\p{Extended_Pictographic}/u.test(v) ? [v] : [];
-        g.innerHTML = emo.map(x => `<button data-e="${esc(x)}">${esc(x)}</button>`).join('') + Object.entries(SYMBOLS).filter(([k]) => !v || k.includes(v)).map(([k, p]) => `<button data-k="${k}" title="${k}"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${p}</svg></button>`).join('') + (v ? '' : SYM_EMOJI.map(x => `<button data-e="${x}">${x}</button>`).join('')); };
+      const body = ov.querySelector('.sym-body'), q = ov.querySelector('#sym-q'), qw = ov.querySelector('.sym-q-wrap'), add = ov.querySelector('.sym-add'), nw = ov.querySelector('#sym-new');
+      let tab = 'icons';
+      const sec = (t, inner) => `<div class="sym-h">${t}</div><div class="sym-grid">${inner}</div>`, tb = x => `<button data-e="${esc(x)}">${esc(x)}</button>`;
+      const ib = k => `<button data-k="${k}" title="${k}"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${SYMBOLS[k]}</svg></button>`;
+      const draw = () => {
+        const v = q.value.trim().toLowerCase(); qw.hidden = tab === 'text'; add.hidden = tab !== 'text'; q.placeholder = tab === 'icons' ? 'Search icons' : 'Paste any emoji';
+        if (tab === 'icons') body.innerHTML = SYM_GROUPS.map(([t, ks]) => { const f = ks.filter(k => !v || k.includes(v) || t.toLowerCase().includes(v)); return f.length ? sec(t, f.map(ib).join('')) : ''; }).join('') || '<p class="xp-note">No icons match.</p>';
+        else if (tab === 'text'){ const my = mine();
+          body.innerHTML = sec('Your text symbols', my.length ? my.map(x => `<button data-e="${esc(x)}" class="sym-mine">${esc(x)}<u data-del="${esc(x)}" title="Remove">×</u></button>`).join('') : '<span class="xp-note" style="grid-column:1/-1;margin:0">Nothing yet. Add your own above; it’s saved to your account.</span>') + TEXT_SYMS.map(([t, x]) => sec(t, x.split(' ').map(tb).join(''))).join(''); }
+        else body.innerHTML = (/\p{Extended_Pictographic}/u.test(q.value) ? sec('Pasted', tb(q.value.trim())) : '') + EMOJI_GROUPS.map(([t, x]) => sec(t, x.split(' ').map(tb).join(''))).join('');
+      };
+      const addSym = () => { const x = nw.value.trim(); if (!x) return; const m = mine(); if (!m.includes(x)){ m.unshift(x); saveSoon(false); } nw.value = ''; draw(); };
+      ov.querySelector('.sym-tabs').addEventListener('click', e => { const t = e.target.closest('[data-t]'); if (!t) return; tab = t.dataset.t; q.value = ''; ov.querySelectorAll('.sym-tabs button').forEach(x => x.classList.toggle('on', x === t)); draw(); });
+      ov.querySelector('#sym-addbtn').addEventListener('click', addSym); nw.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); addSym(); } });
       q.addEventListener('input', draw); draw(); setTimeout(() => q.focus(), 60);
-      g.addEventListener('click', e => { const b = e.target.closest('button'); if (b) ov._close(b.dataset.k ? {sym:b.dataset.k} : {emoji:b.dataset.e}); });
+      body.addEventListener('click', e => {
+        const d = e.target.closest('[data-del]'); if (d){ e.stopPropagation(); const m = mine(), i = m.indexOf(d.dataset.del); if (i > -1){ m.splice(i, 1); saveSoon(false); draw(); } return; }
+        const b = e.target.closest('button'); if (b) ov._close(b.dataset.k ? {sym:b.dataset.k} : {emoji:b.dataset.e});
+      });
     }});
 }
 world.addEventListener('pointerdown', e => {
@@ -8883,6 +8903,7 @@ function updateStorageChip(){
   const dot = $('#dot'), txt = $('#chipText'), chip = $('#chip');
   dot.classList.toggle('bad', !storageOK); dot.classList.toggle('warn', storageOK && !!backupDir && backupPerm !== 'granted');
   txt.textContent = !storageOK ? 'Not saving' : backupDir && backupPerm === 'granted' ? 'Backed up' : 'On this device';
+  chip.style.display = (!storageOK || (backupDir && backupPerm !== 'granted')) ? '' : 'none';
   chip.title = !storageOK ? 'Storage is blocked in this browser' : backupDir ? (backupPerm === 'granted' ? `Auto-backup to “${backupDir.name}”` : 'Auto-backup paused — click to reconnect') : 'Stored on this device only';
 }
 
@@ -9030,16 +9051,22 @@ async function eraseAll(){
 }
 let deferredInstall = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; });
+async function deleteThisBoard(){
+  const b = cur(); if (b.id === S.rootId) return;
+  const par = S.boards[b.parent], card = par && Object.values(par.cards).find(c => c.type === 'board' && c.target === b.id); if (!card) return;
+  const ok = await modal({title:`Delete “${b.title}”?`, html:'<p>This board and everything on it moves to Trash, where it stays for 30 days.</p>', actions:[{label:'Cancel', value:false}, {label:'Delete board', kind:'danger', value:true}]});
+  if (!ok) return;
+  openBoard(par.id); if (curId !== par.id) return;
+  deleteCards([card.id]); toast('Board moved to Trash', {label:'Undo', fn:undo});
+}
 function openMoreMenu(){
   const r = $('#moreBtn').getBoundingClientRect();
-  const items = [{label:'Search & commands', icon:'search', kbd:'Ctrl K', fn:() => openPalette()}, {sep:true},
-    {label:'Export & share…', icon:'share', kbd:'Ctrl E', fn:() => openExport()}, {label:'Import a board…', icon:'upload', fn:() => importBoardFile()}, {sep:true},
+  const items = [{label:'Export & share…', icon:'share', kbd:'Ctrl E', fn:() => openExport()}, {label:'Import a board…', icon:'upload', fn:() => importBoardFile()}, {sep:true},
     {label:'Export backup', icon:'download', kbd:'Ctrl S', fn:exportBackup}, {label:'Import backup…', icon:'upload', fn:importBackup},
     {label:'Storage & backup', icon:'database', fn:() => storagePanel()}, {label:'Archived boards', icon:'folder', kbd:(S.archive || []).length ? String(S.archive.length) : '', fn:openArchive}, {label:'Storage health check', icon:'database', fn:healthCheck}, {sep:true},
-    {label:'Undo', icon:'undo', kbd:'Ctrl Z', fn:() => undo()}, {label:'Redo', icon:'redo', kbd:'Ctrl Y', fn:() => redo()}, {sep:true},
     {label:'Appearance…', icon:'palette', fn:openAppearance}, {label:'Customize dock & view…', icon:'dock', fn:customizeDock}, {sep:true},
-    {label:'How to use Tessera', icon:'help', kbd:'?', fn:() => openHelp()}, {label:'Keyboard shortcuts', icon:'keyboard', fn:shortcuts}, {sep:true},
-    {label:'Erase everything…', icon:'trash', danger:true, fn:eraseAll}];
+    {label:'How to use Tessera', icon:'help', kbd:'?', fn:() => openHelp()}, {label:'Keyboard shortcuts', icon:'keyboard', fn:shortcuts}];
+  if (curId !== S.rootId) items.push({sep:true}, {label:'Delete this board…', icon:'trash', danger:true, fn:deleteThisBoard});
   openMenu(items, r.right, r.bottom + 8, true);
 }
 
@@ -9061,7 +9088,7 @@ tap('#dueBtn', openDueSoon); tap('#helpBtn', () => openHelp()); tap('#presBtn', 
 tap('#emTpl', () => openTemplates('here'));
 $('#crumbs').addEventListener('click', e => {
   const c = e.target.closest('.crumb'); if (!c) return;
-  if (c.dataset.b === curId){ const sp = c.querySelector('span'); if (!sp.isContentEditable) inlineEdit(sp, cur().title, v => { cur().title = v; }); }
+  if (c.dataset.b === curId){ const sp = c.querySelector('.cr-t'); if (sp && !sp.isContentEditable) inlineEdit(sp, cur().title, v => { cur().title = v; }); }
   else openBoard(c.dataset.b);
 });
 window.addEventListener('resize', () => { if (fmtFor) positionFormatBar(); hideMenus(); minimapSoon(); });
@@ -9212,7 +9239,7 @@ async function init(){
   document.fonts?.ready?.then(() => { world.querySelectorAll('.ti-text').forEach(autosize); drawLinks(); if (needFit) fit(false); });
   if (!storageOK) toast('Storage is blocked here — changes won’t be saved', {label:'Details', fn:() => storagePanel()}, 9000);
   await initAutoBackup();
-  const showStart = S.meta.welcomed && !S.meta.splashOff && Date.now() - lastActiveAtLoad > AWAY;
+  const showStart = S.meta.welcomed && (window.__tessGate || (!S.meta.splashOff && Date.now() - lastActiveAtLoad > AWAY));
   if (!S.meta.welcomed){ if (!window.__tessGate) setTimeout(showWelcome, 200); }
   else if (showStart) showSplash();
   else { setTimeout(dueReminder, 2400); backupNudge(); setTimeout(() => loadThumb(curId).then(u => { if (!u) captureThumb(curId); }), 3000); }
@@ -9225,7 +9252,8 @@ async function init(){
 }
 /* ---------- bridge for cloud.js (accounts + cloud save) ---------- */
 window.__tessera = VIEWER ? null : {
-  S: () => S, cur: () => curId, welcome: showWelcome, open: id => openBoard(id), kids: id => { const o = new Set(); descendantsOf(id, o); o.add(id); return [...o]; }, toast,
+  S: () => S, cur: () => curId, welcome: showWelcome,
+  home(){ if (splashEl){ const e = splashEl; splashEl = null; document.removeEventListener('keydown', splashKey, true); e.remove(); } showSplash(); }, open: id => openBoard(id), kids: id => { const o = new Set(); descendantsOf(id, o); o.add(id); return [...o]; }, toast,
   async wipe(){ window.__tessWiped = true; clearTimeout(saveT); if (db){ await idbClear('img'); await idbClear('kv'); } }, modal, esc, buildBackup, getImg: loadImg, putImg: imgPut,
   bundle: bid => shareBundle(bid, true),
   idsOf: boards => { const o = new Set(); for (const b of Object.values(boards)) for (const c of Object.values(b.cards || {})) for (const k of cardImgIds(c)) o.add(k); return [...o]; },
@@ -9235,7 +9263,7 @@ window.__tessera = VIEWER ? null : {
     for (const t of st.templates || []){ sb(t.board); for (const b of Object.values(t.subs || {})) sb(b); }
     for (const f of st.fonts || []) if (f.file) o.add(f.file); return [...o]; },
   async adopt(st){ S = st; normalizeState(); S.meta.welcomed = true; renderDock(); imgCache.clear(); curId = S.rootId; hist.past = []; hist.future = []; sel.clear(); selLink = null;
-    const needFit = !cur().view.set; render(); if (needFit) fit(false); await saveNow(); }
+    const needFit = !cur().view.set; render(); if (needFit) fit(false); await saveNow(); window.__tessera.home(); }
 };
 init();
 })();
