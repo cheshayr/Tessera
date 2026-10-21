@@ -2,6 +2,18 @@
 (() => {
 'use strict';
 const C = window.TESSERA_CLOUD;
+if (C && C.url && !/YOUR-/.test(C.url) && /^#s=[\w-]+$/.test(location.hash) && !window.__SHARE) recordOpened(location.hash.slice(3));
+async function recordOpened(token) {
+  try {
+    const ref = new URL(C.url).hostname.split('.')[0], ses = JSON.parse(localStorage.getItem(`sb-${ref}-auth-token`) || 'null');
+    if (!ses?.access_token) return;
+    const h = { 'Content-Type': 'application/json', apikey: C.anonKey, Authorization: 'Bearer ' + ses.access_token };
+    const r = await (await fetch(C.url + '/rest/v1/rpc/get_share', { method: 'POST', headers: h, body: JSON.stringify({ p_token: token }) })).json();
+    if (!r || r.owner === ses.user?.id) return;
+    await fetch(C.url + '/rest/v1/opened_shares?on_conflict=user_id,token', { method: 'POST', headers: { ...h, Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify({ user_id: ses.user.id, token, title: r.title, opened_at: new Date().toISOString() }) });
+  } catch {}
+}
 if (!C || !C.url || !C.anonKey || /YOUR-/.test(C.url) || window.__SHARE || /^#(view|s)=/.test(location.hash)) return;
 const LIB = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
 const confirmedNow = /type=(signup|email)/.test(location.hash);
@@ -40,7 +52,7 @@ function card(inner) {
   sb = window.supabase.createClient(C.url, C.anonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
   addButton();
   sb.auth.onAuthStateChange((ev, ses) => setTimeout(() => onSession(ses), 0));
-  window.__tessOnSave = schedulePush;
+  window.__tessOnSave = schedulePush; window.__tessProfile = openProfile;
   document.addEventListener('visibilitychange', () => { if (document.hidden && pushT) { clearTimeout(pushT); pushT = 0; push(); } });
 })();
 
@@ -53,6 +65,7 @@ async function onSession(ses) {
   user = u; profile = null; shares = [];
   const { data } = await sb.from('profiles').select('username').eq('id', user.id).maybeSingle(); profile = data;
   if (confirmedNow) T.toast('Email confirmed. Welcome!');
+  decorateHome(document.getElementById('splash'));
   await firstSync();
 }
 async function firstSync() {
@@ -140,21 +153,12 @@ async function refreshShares() {
 
 /* ---------- UI ---------- */
 function setStatus(s) { status = s; paint(); }
-function paint() { const b = document.getElementById('clBtn'); if (b) b.innerHTML = user ? `<i class="cl-dot"></i>${T.esc(profile?.username || 'Account')}<small>${T.esc(status)}</small>` : 'Sign in'; }
-function addButton() {
-  const st = document.createElement('style');
-  st.textContent = `#clDock{position:fixed;left:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:60;display:flex;gap:8px}#clBtn,#clProj{height:34px;padding:0 14px;border-radius:12px;display:flex;align-items:center;gap:8px;font:600 12.5px/1 inherit;color:var(--text);border:1px solid var(--line-2);cursor:pointer}
-#clBtn small{font-weight:500;color:var(--text-3)}.cl-dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
-.cl-f{display:grid;gap:10px;margin-top:6px}.cl-f input{height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--line-2);background:var(--surface-2);color:var(--text);font:inherit;width:100%;box-sizing:border-box}
-.cl-err{color:#d6455d;font-size:13px;min-height:18px;margin:6px 0 0}.cl-muted,.cl-sw{color:var(--text-3);font-size:13px}.cl-sw{background:none;border:0;cursor:pointer;color:var(--accent);padding:0;font:inherit;margin-top:8px}
-.cl-row{display:flex;gap:6px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}.cl-row>div{flex:1;min-width:0}.cl-row small{display:block;color:var(--text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cl-sub{margin:16px 0 4px;font-size:13px;font-weight:600;color:var(--text-2)}.cl-acts{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 4px}
-.cl-proj{display:block;width:100%;text-align:left;padding:10px 12px;margin-top:6px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);color:var(--text);font:inherit;cursor:pointer}
-.cl-proj:hover{border-color:var(--accent)}.cl-proj small{display:block;color:var(--text-3);margin-top:2px}.cl-list{max-height:45vh;overflow:auto}`;
-  document.head.appendChild(st);
-  const d = document.createElement('div'); d.id = 'clDock';
-  d.innerHTML = '<button id="clBtn" class="glass"></button><button id="clProj" class="glass">Projects</button>';
-  document.body.appendChild(d); d.querySelector('#clBtn').onclick = openPanel; d.querySelector('#clProj').onclick = openProjects; paint();
+function paint() {
+  const b = document.getElementById('clBtn'), pj = document.getElementById('clProj');
+  if (pj) pj.hidden = !user;
+  if (!b) return; b.hidden = !user;
+  const col = !status || status === 'Saved' ? '#2fbf71' : /Saving|Syncing|Loading|Unsaved/.test(status) ? '#e8a93a' : '#d6455d';
+  b.innerHTML = `<i class="cl-dot" style="background:${col}"></i>${T.esc(status || 'Saved')}`; b.title = 'Click to save now';
 }
 function showGate(mode = 'in') {
   const up = mode === 'up', f = (n, t, p) => `<input name="${n}" type="${t}" placeholder="${p}" autocomplete="${n === 'password' || n === 'confirm' ? (up ? 'new-password' : 'current-password') : n === 'email' ? 'email' : 'username'}">`;
@@ -213,13 +217,68 @@ async function submit(ov, up) {
   } catch { err('Couldn’t reach the server. Check your connection.'); }
   finally { btn.disabled = false; }
 }
-async function openPanel() {
+function openProfile() {
   if (!user) return showGate('in');
   const e = T.esc;
-  T.modal({ title: 'Your account', eyebrow: '@' + e(profile?.username || ''),
-    html: `<p class="cl-muted">${e(user.email)}</p><p class="cl-muted">Your boards sync to this account · ${e(status || 'Saved')}</p>`,
-    actions: [{ label: 'Sign out', value: 'out' }, { label: 'Done', kind: 'primary', primary: true, value: true }] })
-    .then(v => { if (v === 'out') signOutFlow(); });
+  T.modal({ title: 'Profile', eyebrow: '@' + e(profile?.username || ''), cls: 'cl-modal',
+    html: `<div class="cl-f">
+      <label class="cl-lab">Username</label><div class="cl-line"><input name="username" value="${e(profile?.username || '')}" maxlength="20" autocomplete="username"><button class="btn" data-u>Update</button></div>
+      <label class="cl-lab">Email</label><div class="cl-line"><input name="email" type="email" value="${e(user.email)}" autocomplete="email"><button class="btn" data-m>Update</button></div>
+      <label class="cl-lab">Password</label>
+      <input name="cur" type="password" placeholder="Current password" autocomplete="current-password">
+      <input name="new" type="password" placeholder="New password (8+ characters)" autocomplete="new-password">
+      <input name="conf" type="password" placeholder="Confirm new password" autocomplete="new-password">
+      <button class="btn" data-p>Update password</button></div><p class="cl-msg" id="clMsg"></p>`,
+    actions: [{ label: 'Log out or switch account', value: 'out' }, { label: 'Done', kind: 'primary', primary: true, value: true }],
+    onOpen: ov => {
+      const val = n => ov.querySelector(`[name=${n}]`).value, msg = (t, ok) => { const m = ov.querySelector('#clMsg'); m.textContent = t; m.style.color = ok ? '#2fbf71' : '#d6455d'; };
+      ov.addEventListener('click', async ev => {
+        const b = ev.target.closest('[data-u],[data-m],[data-p]'); if (!b) return; b.disabled = true; msg('');
+        try {
+          if ('u' in b.dataset) {
+            const name = val('username').trim();
+            if (name === profile?.username) return msg('That’s already your username.');
+            if (!/^[A-Za-z0-9_]{3,20}$/.test(name)) return msg('Username: 3–20 letters, numbers or underscores.');
+            const { data: free } = await sb.rpc('username_available', { p: name }); if (!free) return msg('That username is taken.');
+            const { error } = await sb.from('profiles').update({ username: name }).eq('id', user.id);
+            if (error) return msg('Couldn’t change it. Try again.');
+            profile = { ...profile, username: name }; ov.querySelector('.eyebrow').textContent = '@' + name; msg('Username updated.', true);
+          } else if ('m' in b.dataset) {
+            const email = val('email').trim();
+            if (email === user.email) return msg('That’s already your email.');
+            if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return msg('Enter a valid email address.');
+            const { error } = await sb.auth.updateUser({ email }, { emailRedirectTo: location.href.split(/[#?]/)[0] });
+            if (error) return msg(error.message);
+            msg('Check your inbox for a confirmation link. Your email changes once you confirm.', true);
+          } else {
+            const cur = val('cur'), nw = val('new');
+            if (!cur) return msg('Enter your current password.');
+            if (nw.length < 8) return msg('New password must be at least 8 characters.');
+            if (nw !== val('conf')) return msg('New passwords don’t match.');
+            const { error: bad } = await sb.auth.signInWithPassword({ email: user.email, password: cur });
+            if (bad) return msg('Current password is wrong.');
+            const { error } = await sb.auth.updateUser({ password: nw });
+            if (error) return msg(error.message);
+            ['cur', 'new', 'conf'].forEach(n => { ov.querySelector(`[name=${n}]`).value = ''; }); msg('Password updated.', true);
+          }
+        } catch { msg('Couldn’t reach the server. Check your connection.'); }
+        finally { b.disabled = false; }
+      });
+    } }).then(v => { if (v === 'out') signOutFlow(); });
+}
+// Home screen extras: mark projects that have a share link, and list shared links this person opened.
+function decorateHome(el) {
+  if (!el || !user || el.dataset.cl) return; el.dataset.cl = 1;
+  (async () => {
+    const [{ data: mine }, { data: opened }] = await Promise.all([
+      sb.from('shares').select('token,board_id').eq('owner', user.id),
+      sb.from('opened_shares').select('token,title,opened_at').order('opened_at', { ascending: false }).limit(12)]);
+    for (const x of mine || []) el.querySelectorAll(`[data-b="${CSS.escape(x.board_id)}"] b`).forEach(b => { if (!b.querySelector('.cl-pill')) b.insertAdjacentHTML('beforeend', '<span class="cl-pill">Shared</span>'); });
+    const foot = el.querySelector('.sp-foot'); if (!opened?.length || !foot) return;
+    foot.insertAdjacentHTML('beforebegin', `<div class="sp-in"><div class="sp-sec">Opened from shared links</div><div class="sp-cards">${opened.map(o =>
+      `<button class="sp-card" data-link="${T.esc(o.token)}"><div class="sp-thumb"><span class="lk" style="color:var(--text-3)">Shared link</span></div><div class="ct"><b>${T.esc(o.title || 'Shared board')}</b><small>opened ${new Date(o.opened_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</small></div></button>`).join('')}</div></div>`);
+    el.querySelectorAll('[data-link]').forEach(b => { b.onclick = () => { location.hash = '#s=' + b.dataset.link; location.reload(); }; });
+  })().catch(() => {});
 }
 // A project is any board on Home that has something on it (blank boards are left out); it is saved with the account automatically.
 function projectList() {
