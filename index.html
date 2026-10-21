@@ -8832,6 +8832,7 @@ function paletteActions(){
   a.push({label:S.meta.minimap === false ? 'Show minimap' : 'Hide minimap', icon:'map', run:() => { S.meta.minimap = S.meta.minimap === false; drawMinimap(); saveSoon(false); }});
   a.push({label:`Open trash${S.trash.length ? ` (${S.trash.length})` : ''}`, icon:'trash', run:openTrash});
   a.push({label:'Storage & backup', icon:'database', run:() => storagePanel()});
+  if (!isInstalled()) a.push({label:'Install the app', icon:'download', run:installApp});
   a.push({label:'Export backup', icon:'download', kbd:'Ctrl S', run:exportBackup});
   a.push({label:'Import backup', icon:'upload', run:importBackup});
   a.push({label:'Keyboard shortcuts', icon:'keyboard', run:shortcuts});
@@ -9147,7 +9148,18 @@ async function eraseAll(){
   hist.past = []; hist.future = []; sel.clear(); render(); fit(false); saveNow(); toast('Everything erased');
 }
 let deferredInstall = null;
+const isInstalled = () => matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: window-controls-overlay)').matches || navigator.standalone === true;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; });
+window.addEventListener('appinstalled', () => { deferredInstall = null; toast('Tessera is installed'); });
+async function installApp(){
+  if (isInstalled()){ toast('Tessera is already installed on this device'); return; }
+  if (deferredInstall){ const p = deferredInstall; deferredInstall = null; try { await p.prompt(); await p.userChoice; } catch {} return; }
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  modal({title:'Install Tessera', eyebrow:'Works offline, opens like a native app', html: ios
+    ? '<p>On iPhone or iPad: tap the <b>Share</b> button in Safari, then choose <b>Add to Home Screen</b>.</p>'
+    : '<p>Open the browser menu and choose <b>Install Tessera</b> (or <b>Install app</b> / <b>Add to Home screen</b>). In Chrome and Edge you can also use the install icon at the right of the address bar.</p><p style="color:var(--text-3);font-size:12.5px">If you don’t see it, open Tessera from its web address (not a saved file) and reload once.</p>',
+    actions:[{label:'Got it', kind:'primary', primary:true, value:true}]});
+}
 async function deleteThisBoard(){
   const b = cur(); if (b.id === S.rootId) return;
   const par = S.boards[b.parent], card = par && Object.values(par.cards).find(c => c.type === 'board' && c.target === b.id); if (!card) return;
@@ -9162,6 +9174,7 @@ function openMoreMenu(){
     {label:'Export backup', icon:'download', kbd:'Ctrl S', fn:exportBackup}, {label:'Import backup…', icon:'upload', fn:importBackup},
     {label:'Storage & backup', icon:'database', fn:() => storagePanel()}, {label:'Storage health check', icon:'database', fn:healthCheck}, {sep:true},
     {label:'Appearance…', icon:'palette', fn:openAppearance}, {label:'Customize dock & view…', icon:'dock', fn:customizeDock}, {sep:true},
+    ...(isInstalled() ? [] : [{label:'Install the app', icon:'download', fn:installApp}, {sep:true}]),
     {label:'How to use Tessera', icon:'help', kbd:'?', fn:() => openHelp()}, {label:'Keyboard shortcuts', icon:'keyboard', fn:shortcuts}];
   if (curId !== S.rootId) items.push({sep:true}, {label:'Delete this board…', icon:'trash', danger:true, fn:deleteThisBoard});
   openMenu(items, r.right, r.bottom + 8, true);
