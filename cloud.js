@@ -134,12 +134,6 @@ async function publish(bid) {
   lsSet('simgs:' + data.token, [...have]);
   return data.token;
 }
-async function unshare(token) {
-  await sb.from('shares').delete().eq('token', token);
-  const { data } = await sb.storage.from('shared').list(`${user.id}/${token}`);
-  if (data?.length) await sb.storage.from('shared').remove(data.map(f => `${user.id}/${token}/${f.name}`));
-  lsSet('simgs:' + token, []);
-}
 async function refreshShares() {
   try { for (const s of await loadShares()) { const b = T.S().boards[s.board_id]; if (b && (b.editedAt || 0) > new Date(s.updated_at).getTime()) await publish(s.board_id); } } catch {}
 }
@@ -149,13 +143,18 @@ function setStatus(s) { status = s; paint(); }
 function paint() { const b = document.getElementById('clBtn'); if (b) b.innerHTML = user ? `<i class="cl-dot"></i>${T.esc(profile?.username || 'Account')}<small>${T.esc(status)}</small>` : 'Sign in'; }
 function addButton() {
   const st = document.createElement('style');
-  st.textContent = `#clBtn{position:fixed;left:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:60;height:34px;padding:0 14px;border-radius:12px;display:flex;align-items:center;gap:8px;font:600 12.5px/1 inherit;color:var(--text);border:1px solid var(--line-2);cursor:pointer}
+  st.textContent = `#clDock{position:fixed;left:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:60;display:flex;gap:8px}#clBtn,#clProj{height:34px;padding:0 14px;border-radius:12px;display:flex;align-items:center;gap:8px;font:600 12.5px/1 inherit;color:var(--text);border:1px solid var(--line-2);cursor:pointer}
 #clBtn small{font-weight:500;color:var(--text-3)}.cl-dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
 .cl-f{display:grid;gap:10px;margin-top:6px}.cl-f input{height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--line-2);background:var(--surface-2);color:var(--text);font:inherit;width:100%;box-sizing:border-box}
 .cl-err{color:#d6455d;font-size:13px;min-height:18px;margin:6px 0 0}.cl-muted,.cl-sw{color:var(--text-3);font-size:13px}.cl-sw{background:none;border:0;cursor:pointer;color:var(--accent);padding:0;font:inherit;margin-top:8px}
-.cl-row{display:flex;gap:6px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}.cl-row>div{flex:1;min-width:0}.cl-row small{display:block;color:var(--text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}`;
+.cl-row{display:flex;gap:6px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}.cl-row>div{flex:1;min-width:0}.cl-row small{display:block;color:var(--text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cl-sub{margin:16px 0 4px;font-size:13px;font-weight:600;color:var(--text-2)}.cl-acts{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 4px}
+.cl-proj{display:block;width:100%;text-align:left;padding:10px 12px;margin-top:6px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);color:var(--text);font:inherit;cursor:pointer}
+.cl-proj:hover{border-color:var(--accent)}.cl-proj small{display:block;color:var(--text-3);margin-top:2px}.cl-list{max-height:45vh;overflow:auto}`;
   document.head.appendChild(st);
-  const b = document.createElement('button'); b.id = 'clBtn'; b.className = 'glass'; b.onclick = openPanel; document.body.appendChild(b); paint();
+  const d = document.createElement('div'); d.id = 'clDock';
+  d.innerHTML = '<button id="clBtn" class="glass"></button><button id="clProj" class="glass">Projects</button>';
+  document.body.appendChild(d); d.querySelector('#clBtn').onclick = openPanel; d.querySelector('#clProj').onclick = openProjects; paint();
 }
 function showGate(mode = 'in') {
   const up = mode === 'up', f = (n, t, p) => `<input name="${n}" type="${t}" placeholder="${p}" autocomplete="${n === 'password' || n === 'confirm' ? (up ? 'new-password' : 'current-password') : n === 'email' ? 'email' : 'username'}">`;
@@ -216,27 +215,50 @@ async function submit(ov, up) {
 }
 async function openPanel() {
   if (!user) return showGate('in');
-  await loadShares().catch(() => {});
-  const cur = T.S().boards[T.cur()], e = T.esc;
-  const rows = shares.map(s => `<div class="cl-row"><div><b>${e(s.title)}</b><small>${e(linkOf(s.token))}</small></div><button class="btn" data-copy="${s.token}">Copy</button><button class="btn" data-upd="${e(s.board_id)}">Update</button><button class="btn" data-stop="${s.token}">Stop</button></div>`).join('') || '<p class="cl-muted">No shared links yet.</p>';
-  T.modal({ title: 'Your account', eyebrow: '@' + e(profile?.username || ''), cls: 'cl-modal',
-    html: `<p class="cl-muted">${e(user.email)} · ${e(status || 'Saved')}</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"><button class="btn" data-save>Save now</button><button class="btn" data-load>Load from cloud</button></div>
-      <h3 style="margin:14px 0 4px;font-size:14px">Share view-only link</h3>
-      <button class="btn primary" data-share>Share “${e(cur?.title || 'this board')}”</button>
-      <p class="cl-muted">Anyone with the link can view it without logging in. Use Update after editing, or Stop to turn the link off.</p>${rows}`,
-    actions: [{ label: 'Sign out', value: 'out' }, { label: 'Done', kind: 'primary', primary: true, value: true }],
+  const e = T.esc;
+  T.modal({ title: 'Your account', eyebrow: '@' + e(profile?.username || ''),
+    html: `<p class="cl-muted">${e(user.email)}</p><p class="cl-muted">Your boards sync to this account · ${e(status || 'Saved')}</p>`,
+    actions: [{ label: 'Sign out', value: 'out' }, { label: 'Done', kind: 'primary', primary: true, value: true }] })
+    .then(v => { if (v === 'out') signOutFlow(); });
+}
+// A project is any board on Home that has something on it (blank boards are left out); it is saved with the account automatically.
+function projectList() {
+  const S = T.S(), boards = S.boards, root = boards[S.rootId], out = [];
+  const count = ids => ids.reduce((n, id) => n + Object.keys(boards[id]?.cards || {}).length, 0);
+  const edited = ids => Math.max(0, ...ids.map(i => boards[i]?.editedAt || 0));
+  const own = Object.values(root?.cards || {}).filter(c => c.type !== 'board').length;
+  if (own) out.push({ id: S.rootId, title: root.title || 'Home', n: own, at: edited([S.rootId]) });
+  for (const c of Object.values(root?.cards || {})) {
+    if (c.type !== 'board' || !boards[c.target]) continue;
+    const ids = T.kids(c.target), n = count(ids);
+    if (n) out.push({ id: c.target, title: boards[c.target].title || 'Untitled board', n, at: edited(ids) });
+  }
+  return out.sort((a, b) => b.at - a.at);
+}
+async function shareCurrent() {
+  const id = T.cur(), n = T.kids(id).reduce((k, i) => k + Object.keys(T.S().boards[i]?.cards || {}).length, 0);
+  if (!n) return T.toast('Add something to this board before sharing it');
+  const t = await publish(id);
+  await navigator.clipboard?.writeText(linkOf(t)).catch(() => {});
+  T.toast('Link copied. Anyone with it can view this board.');
+}
+function openProjects() {
+  if (!user) return showGate('in');
+  const e = T.esc, list = projectList(), cur = T.S().boards[T.cur()];
+  const rows = list.map(p => `<button class="cl-proj" data-open="${e(p.id)}"><b>${e(p.title)}</b><small>${p.n} item${p.n > 1 ? 's' : ''}${p.at ? ' · edited ' + new Date(p.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}</small></button>`).join('')
+    || '<p class="cl-muted">Nothing here yet. Boards you build, or start from a template, appear here automatically once they have something on them.</p>';
+  T.modal({ title: 'Projects', eyebrow: e(status || 'Saved'),
+    html: `<div class="cl-acts"><button class="btn" data-save>Save now</button><button class="btn primary" data-share>Share link</button></div>
+      <p class="cl-muted">Share link copies a view-only link for “${e(cur?.title || 'this board')}”. Anyone with it can view it without logging in.</p>
+      <div class="cl-sub">Your projects</div><div class="cl-list">${rows}</div>`,
+    actions: [{ label: 'Done', kind: 'primary', primary: true, value: true }],
     onOpen: ov => ov.addEventListener('click', async ev => {
-      const b = ev.target.closest('button[data-save],[data-load],[data-share],[data-copy],[data-upd],[data-stop]'); if (!b) return;
-      const d = b.dataset, again = () => { ov._close(true); openPanel(); };
+      const b = ev.target.closest('[data-save],[data-share],[data-open]'); if (!b) return;
       try {
-        if ('save' in d) { clearTimeout(pushT); await push(); ov._close(true); }
-        else if ('load' in d) { ov._close(true); await pull(); }
-        else if ('share' in d) { b.disabled = true; b.textContent = 'Publishing…'; const t = await publish(T.cur()); await navigator.clipboard?.writeText(linkOf(t)).catch(() => {}); T.toast('Link copied. Anyone with it can view this board.'); again(); }
-        else if ('copy' in d) { await navigator.clipboard?.writeText(linkOf(d.copy)).catch(() => {}); T.toast('Link copied'); }
-        else if ('upd' in d) { b.textContent = '…'; await publish(d.upd); T.toast('Shared link updated'); again(); }
-        else if ('stop' in d) { await unshare(d.stop); T.toast('Link turned off'); again(); }
+        if ('save' in b.dataset) { ov._close(true); clearTimeout(pushT); pushT = 0; await push(); T.toast(status === 'Saved' ? 'Saved to your account' : 'Couldn’t save. Check your connection.'); }
+        else if ('share' in b.dataset) { b.disabled = true; b.textContent = 'Publishing…'; await shareCurrent(); ov._close(true); }
+        else { ov._close(true); T.open(b.dataset.open); }
       } catch (x) { console.warn(x); T.toast('Something went wrong. Try again.'); }
-    }) }).then(v => { if (v === 'out') signOutFlow(); });
+    }) });
 }
 })();
