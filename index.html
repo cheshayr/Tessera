@@ -1112,6 +1112,15 @@ button.sp-note:hover{border-color:var(--accent);transform:translateY(-1px)}
 .mp-note{font-size:11.5px;color:var(--text-3);line-height:1.5}
 .mp-off{position:absolute;inset:0;display:none;place-items:center;text-align:center;color:#6b6656;font-size:13px;font-weight:500;pointer-events:none}
 .mp-view.offline .mp-off{display:grid}
+.mp-view .gm{position:absolute;inset:0}
+.mp-view{cursor:auto}
+.card.map .mp-media img.g{filter:none!important}
+.mp-key{position:absolute;inset:0;z-index:4;display:grid;place-items:center;padding:20px;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}.mp-key[hidden]{display:none}
+.mk-card{width:min(400px,100%);display:flex;flex-direction:column;gap:12px;padding:26px;border-radius:22px;background:var(--surface);border:1px solid var(--line-2);box-shadow:var(--shadow-lift);text-align:left}
+.mk-card .pi{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent-strong)}
+.mk-card h3{margin:0;font-family:var(--serif);font-size:26px;font-weight:400}.mk-card p,.mk-card small{margin:0;color:var(--text-2);font-size:13px;line-height:1.55}.mk-card small{color:var(--text-3);font-size:12px}
+.mk-in{height:44px;border-radius:12px;border:1px solid var(--line-2);background:var(--input-bg);padding:0 14px;font:inherit;color:var(--text);outline:none}.mk-in:focus{border-color:var(--accent)}
+.mk-err{min-height:0;color:var(--danger);font-size:12.5px}.mk-err:empty{display:none}
 .mp-view .attr{position:absolute;right:8px;bottom:8px;z-index:3;font-size:11px;padding:3px 8px;border-radius:6px;background:rgba(255,255,255,.88);color:#333}
 .mp-view .attr a{color:#333}
 @media (max-width:760px){.mp-side{position:absolute;left:0;right:0;bottom:0;width:auto;max-height:38%;border-left:0;border-top:1px solid var(--line);z-index:4}.ped-top .ttl{display:none}}
@@ -3474,7 +3483,7 @@ function openCardMenu(id, x, y, cell){
       {segment:{label:'Wrap', value:c.wrap ? 'on' : 'off', opts:[['off', 'Scroll'], ['on', 'Wrap']], pick:v => { commit(); c.wrap = v === 'on'; rerenderCard(id); saveSoon(); }}},
       {label:'Copy as Markdown', icon:'copy', fn:() => (navigator.clipboard?.writeText('```' + (c.lang && c.lang !== 'auto' ? c.lang : detectLang(c.code || '')) + '\n' + (c.code || '') + '\n```') || Promise.reject()).then(() => toast('Copied as Markdown'), () => toast('Couldn’t copy'))});
   }
-  if (c.type === 'map') items.push({label:'Edit map…', icon:'map', kbd:'Enter', fn:() => openMapEditor(id)}, {label:'Open in OpenStreetMap', icon:'external', fn:() => window.open(osmLink(c), '_blank', 'noopener')},
+  if (c.type === 'map') items.push({label:'Edit map…', icon:'map', kbd:'Enter', fn:() => openMapEditor(id)}, {label:'Open in Google Maps', icon:'external', fn:() => window.open(osmLink(c), '_blank', 'noopener')},
     {segment:{label:'In dark mode', value:c.lightMap ? 'light' : 'dim', opts:[['dim', 'Dim map'], ['light', 'Keep light']], pick:v => { commit(); c.lightMap = v === 'light'; rerenderCard(id); saveSoon(); }}});
   if (c.type === 'plan') items.push({label:'Open planner…', icon:'plan', kbd:'Enter', fn:() => openPlanEditor(id)}, {segment:{label:'Units', value:c.plan?.unit || 'm', opts:[['m', 'Metres'], ['ft', 'Feet']], pick:v => { commit(); c.plan = {...(c.plan || emptyPlan()), unit:v}; rerenderCard(id); saveSoon(); }}});
   if (c.type === 'clock') clockMenuItems(c, id).forEach(x => items.push(x));
@@ -6875,105 +6884,98 @@ const lat2y = (lat, z) => { const r = lat * Math.PI / 180; return (1 - Math.log(
 const x2lon = (x, z) => x / (256 * 2 ** z) * 360 - 180;
 const y2lat = (y, z) => { const n = Math.PI - 2 * Math.PI * y / (256 * 2 ** z); return 180 / Math.PI * Math.atan(.5 * (Math.exp(n) - Math.exp(-n))); };
 const PIN_SVG = (n, s = 30) => `<svg width="${s}" height="${s * 1.25}" viewBox="0 0 24 30"><path d="M12 29s10-9.2 10-16.5A10 10 0 0 0 2 12.5C2 19.8 12 29 12 29z" fill="#e5484d" stroke="#fff" stroke-width="1.6"/><text x="12" y="16.5" text-anchor="middle" font-size="10" font-weight="700" fill="#fff" font-family="Inter,system-ui,sans-serif">${n}</text></svg>`;
-const osmLink = c => c.lat != null ? `https://www.openstreetmap.org/?mlat=${c.lat.toFixed(5)}&mlon=${c.lng.toFixed(5)}#map=${c.z || 14}/${c.lat.toFixed(5)}/${c.lng.toFixed(5)}` : 'https://www.openstreetmap.org/';
+/* ---- Google Maps ---- */
+const GM_KEY_LS = 'tessera-gmaps-key';
+const mapsKey = () => { let k = ''; try { k = window.TESSERA_MAPS_KEY || window.__SHARE?.mapsKey || localStorage.getItem(GM_KEY_LS) || ''; } catch {} return /^[\w-]{20,80}$/.test(k) ? k : ''; };
+const osmLink = c => c.lat != null ? `https://www.google.com/maps/search/?api=1&query=${c.lat.toFixed(6)},${c.lng.toFixed(6)}` : 'https://www.google.com/maps';
+const GM_DARK = [{elementType:'geometry', stylers:[{color:'#1d1c19'}]}, {elementType:'labels.text.fill', stylers:[{color:'#a39d8c'}]}, {elementType:'labels.text.stroke', stylers:[{color:'#1d1c19'}]},
+  {featureType:'water', elementType:'geometry', stylers:[{color:'#0f1a24'}]}, {featureType:'road', elementType:'geometry', stylers:[{color:'#2c2a25'}]}, {featureType:'road.highway', elementType:'geometry', stylers:[{color:'#3a362c'}]},
+  {featureType:'poi', elementType:'geometry', stylers:[{color:'#24231f'}]}, {featureType:'poi.park', elementType:'geometry', stylers:[{color:'#1f2a20'}]}, {featureType:'transit', stylers:[{visibility:'off'}]}, {featureType:'administrative', elementType:'geometry.stroke', stylers:[{color:'#3a362c'}]}];
+const GM_DARK_STATIC = '&style=element:geometry%7Ccolor:0x1d1c19&style=element:labels.text.fill%7Ccolor:0xa39d8c&style=element:labels.text.stroke%7Ccolor:0x1d1c19&style=feature:water%7Celement:geometry%7Ccolor:0x0f1a24&style=feature:road%7Celement:geometry%7Ccolor:0x2c2a25&style=feature:poi%7Celement:geometry%7Ccolor:0x24231f&style=feature:poi.park%7Celement:geometry%7Ccolor:0x1f2a20&style=feature:transit%7Cvisibility:off';
+let gmP = null;
+function loadGMaps(){
+  if (window.google?.maps?.Map) return Promise.resolve(window.google.maps);
+  if (gmP) return gmP; const key = mapsKey(); if (!key) return Promise.reject(new Error('nokey'));
+  return gmP = new Promise((res, rej) => {
+    window.__gmReady = () => res(window.google.maps); window.gm_authFailure = () => { gmP = null; rej(new Error('auth')); };
+    const s = document.createElement('script'); s.async = true; s.onerror = () => { gmP = null; rej(new Error('net')); };
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=weekly&loading=async&callback=__gmReady`; document.head.appendChild(s);
+  });
+}
+function gmStaticURL(c){
+  const key = mapsKey(); if (!key || c.lat == null) return '';
+  const [a, b] = String(c.ar || '4/3').split('/').map(Number), ratio = (a / b) || 4 / 3, w = 640, h = Math.max(160, Math.min(640, Math.round(w / ratio)));
+  const k = Math.max(0, Math.round(Math.log2((c.vw || w) / w))), z = Math.max(1, Math.min(20, Math.round(c.z || 14) - k));
+  const mk = (c.pins || []).slice(0, 30).map((p, i) => `&markers=color:0xe5484d%7C${i < 9 ? 'label:' + (i + 1) + '%7C' : ''}${(+p.lat).toFixed(6)},${(+p.lng).toFixed(6)}`).join('');
+  return `https://maps.googleapis.com/maps/api/staticmap?center=${(+c.lat).toFixed(6)},${(+c.lng).toFixed(6)}&zoom=${z}&size=${w}x${h}&scale=2&maptype=roadmap${mk}${isDark() ? GM_DARK_STATIC : ''}&key=${key}`;
+}
+new MutationObserver(() => { document.querySelectorAll('#world .card.map img.g').forEach(im => { const c = findCard(im.closest('.card')?.dataset.id); if (c){ const u = gmStaticURL(c); if (u) im.src = u; } }); }).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
 function mapHTML(c){
-  const has = c.lat != null, n = (c.pins || []).length;
-  return `<div class="mp-media" style="--ar:${c.ar || '4/3'}">${c.snap ? '<img alt="" draggable="false">' : `<div class="mp-empty"><span class="pi">${ico('pin', 20)}</span>${has ? 'Open the map to finish it' : 'Set a location'}<button class="btn sm nd mp-edit">${ico('map', 13)}${has ? 'Open map' : 'Choose place'}</button></div>`}${c.snap ? '<span class="mp-attr">© OpenStreetMap</span>' : ''}</div>
-<div class="mp-bar"><div class="mi2"><div class="mp-title">${esc(c.title || 'Map')}</div><div class="mp-sub">${has ? `${n ? `${n} pin${n > 1 ? 's' : ''} · ` : ''}${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}` : 'No location yet'}</div></div><button class="ib nd mp-edit" title="Edit map">${ico('pen', 15)}</button><a class="lk-open nd" href="${esc(osmLink(c))}" target="_blank" rel="noopener noreferrer" title="Open in OpenStreetMap">${ico('external', 15)}</a></div>`;
+  const has = c.lat != null, n = (c.pins || []).length, g = has ? gmStaticURL(c) : '';
+  const media = g ? `<img class="g" alt="" draggable="false" src="${esc(g)}" onerror="this.remove()">` : c.snap ? '<img alt="" draggable="false">' : `<div class="mp-empty"><span class="pi">${ico('pin', 20)}</span>${has ? 'Open the map to finish it' : 'Set a location'}<button class="btn sm nd mp-edit">${ico('map', 13)}${has ? 'Open map' : 'Choose place'}</button></div>`;
+  return `<div class="mp-media" style="--ar:${c.ar || '4/3'}">${media}${!g && c.snap ? '<span class="mp-attr">© OpenStreetMap</span>' : ''}</div>
+<div class="mp-bar"><div class="mi2"><div class="mp-title">${esc(c.title || 'Map')}</div><div class="mp-sub">${has ? `${n ? `${n} pin${n > 1 ? 's' : ''} · ` : ''}${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}` : 'No location yet'}</div></div><button class="ib nd mp-edit" title="Edit map">${ico('pen', 15)}</button><a class="lk-open nd" href="${esc(osmLink(c))}" target="_blank" rel="noopener noreferrer" title="Open in Google Maps">${ico('external', 15)}</a></div>`;
 }
 function openMapEditor(id){
   const c = findCard(id); if (!c) return; hideMenus(); blurEditing();
-  const st = {lat:c.lat ?? 14.5995, lng:c.lng ?? 120.9842, z:c.z || (c.lat != null ? 14 : 11), pins:JSON.parse(JSON.stringify(c.pins || [])), pinMode:false, title:c.title || 'Map'};
+  const st = {lat:c.lat ?? 14.5995, lng:c.lng ?? 120.9842, z:Math.round(c.z || (c.lat != null ? 14 : 11)), pins:JSON.parse(JSON.stringify(c.pins || [])), pinMode:false, title:c.title || 'Map'};
   const ov = document.createElement('div'); ov.className = 'overlay ped';
   ov.innerHTML = `<div class="ped-shell"><div class="ped-top"><span class="ttl">Map</span><input class="nm" value="${esc(st.title)}" maxlength="60" aria-label="Map title"><span class="sp"></span><button class="btn sm" data-x="cancel">Cancel</button><button class="btn sm primary" data-x="save">Save map</button></div>
-<div class="ped-main"><div class="mp-view"><div class="tiles"></div><div class="pins"></div><div class="mp-off">${ico('cloud', 22)}<br>Map tiles need an internet connection.<br>Your pins and location are still saved.</div>
+<div class="ped-main"><div class="mp-view"><div class="gm"></div>
 <div class="mp-search"><svg class="s" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">${ICONS.search}</svg><input placeholder="Search a place or address" autocomplete="off"><div class="mp-res" hidden></div></div>
 <div class="mp-ctrl"><button class="ib" data-x="in" title="Zoom in">${ico('plus', 17)}</button><button class="ib" data-x="out" title="Zoom out">${ico('minus', 17)}</button><button class="ib" data-x="pin" title="Add pins — click the map">${ico('pin', 17)}</button><button class="ib" data-x="me" title="My location">${ico('compass', 17)}</button></div>
-<span class="attr">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</span></div>
-<aside class="mp-side"><h4>Pins</h4><div class="mp-pins"></div><p class="mp-note">Tap the pin button, then click the map to drop a pin. Drag to move around, scroll or use + / − to zoom.</p><p class="mp-note">Searching sends what you type to OpenStreetMap. Everything else stays on this device.</p></aside></div></div>`;
+<div class="mp-key" hidden><div class="mk-card"><span class="pi">${ico('map', 20)}</span><h3>Connect Google Maps</h3><p>Paste your Google Maps API key. It stays on this device, and shared boards use it to show the map.</p><input class="mk-in" placeholder="AIza…" spellcheck="false" autocomplete="off"><div class="mk-err"></div><button class="btn primary mk-go">Save key</button><small>Enable <b>Maps JavaScript API</b>, <b>Geocoding API</b> and <b>Maps Static API</b> in Google Cloud, and restrict the key to your site address.</small></div></div></div>
+<aside class="mp-side"><h4>Pins</h4><div class="mp-pins"></div><p class="mp-note">Tap the pin button, then click the map to drop a pin. Drag a pin to move it.</p><p class="mp-note">Search and map tiles come from Google Maps. Everything else stays on this device.</p></aside></div></div>`;
   document.body.appendChild(ov); requestAnimationFrame(() => ov.classList.add('show'));
-  const view = ov.querySelector('.mp-view'), tiles = ov.querySelector('.tiles'), pinsEl = ov.querySelector('.pins'), cache = new Map();
-  let cx = lon2x(st.lng, st.z), cy = lat2y(st.lat, st.z), failN = 0, okN = 0;
-  const draw = () => {
-    const W = view.clientWidth, H = view.clientHeight, n = 2 ** st.z, tlx = cx - W / 2, tly = cy - H / 2, want = new Set();
-    for (let ty = Math.floor(tly / 256); ty <= Math.floor((tly + H) / 256); ty++){
-      if (ty < 0 || ty >= n) continue;
-      for (let tx = Math.floor(tlx / 256); tx <= Math.floor((tlx + W) / 256); tx++){
-        const wx = ((tx % n) + n) % n, key = `${st.z}/${wx}/${ty}/${tx}`; want.add(key);
-        let im = cache.get(key);
-        if (!im){ im = new Image(); im.crossOrigin = 'anonymous'; im.draggable = false; im.onload = () => { okN++; view.classList.remove('offline'); }; im.onerror = () => { if (++failN > 3 && !okN) view.classList.add('offline'); }; im.src = TILE(st.z, wx, ty); cache.set(key, im); tiles.appendChild(im); }
-        im.style.left = (tx * 256 - tlx) + 'px'; im.style.top = (ty * 256 - tly) + 'px';
-      }
-    }
-    for (const [k, im] of cache) if (!want.has(k)){ im.remove(); cache.delete(k); }
-    pinsEl.innerHTML = st.pins.map((p, i) => `<div class="mp-pin" style="left:${lon2x(p.lng, st.z) - tlx}px;top:${lat2y(p.lat, st.z) - tly}px">${PIN_SVG(i + 1)}${p.label ? `<span>${esc(p.label)}</span>` : ''}</div>`).join('');
-  };
+  const view = ov.querySelector('.mp-view'), gmEl = ov.querySelector('.gm'), keyBox = ov.querySelector('.mp-key'); let map = null, G = null, markers = [], geocoder = null;
+  const sync = () => { markers.forEach(m => m.setMap(null)); markers = st.pins.map((p, i) => { const m = new G.Marker({position:{lat:p.lat, lng:p.lng}, map, draggable:true, label:{text:String(i + 1), color:'#fff', fontWeight:'700', fontSize:'12px'}, title:p.label || ''}); m.addListener('dragend', () => { const q = m.getPosition(); p.lat = q.lat(); p.lng = q.lng(); }); return m; }); };
   const side = () => { ov.querySelector('.mp-pins').innerHTML = st.pins.length ? st.pins.map((p, i) => `<div class="mp-pinrow" data-i="${i}"><span class="n">${i + 1}</span><input value="${esc(p.label || '')}" placeholder="Label" maxlength="40"><button class="ib" data-del title="Remove">${ico('trash', 14)}</button></div>`).join('') : '<p class="mp-note">No pins yet.</p>'; };
-  const setZoom = (nz, px = view.clientWidth / 2, py = view.clientHeight / 2) => {
-    nz = clamp(nz, 2, 19); if (nz === st.z) return; const k = 2 ** (nz - st.z);
-    const wx = cx - view.clientWidth / 2 + px, wy = cy - view.clientHeight / 2 + py;
-    cx = wx * k - px + view.clientWidth / 2; cy = wy * k - py + view.clientHeight / 2; st.z = nz; draw();
-  };
-  const centerOn = (lat, lng, z) => { if (z) st.z = z; cx = lon2x(lng, st.z); cy = lat2y(lat, st.z); draw(); };
-  let drag = null;
-  view.addEventListener('pointerdown', e => { if (e.target.closest('.mp-search,.mp-ctrl,.attr')) return; view.setPointerCapture(e.pointerId); drag = {x:e.clientX, y:e.clientY, cx, cy, moved:false}; view.style.cursor = 'grabbing'; });
-  view.addEventListener('pointermove', e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.hypot(dx, dy) > 4) drag.moved = true; cx = drag.cx - dx; cy = drag.cy - dy; draw(); });
-  view.addEventListener('pointerup', e => {
-    if (!drag) return; const d = drag; drag = null; view.style.cursor = '';
-    if (!d.moved && st.pinMode){ const r = view.getBoundingClientRect(), wx = cx - r.width / 2 + (e.clientX - r.left), wy = cy - r.height / 2 + (e.clientY - r.top); st.pins.push({id:uid(), lat:y2lat(wy, st.z), lng:x2lon(wx, st.z), label:''}); draw(); side(); sfx('pop'); setTimeout(() => ov.querySelector('.mp-pinrow:last-child input')?.focus(), 30); }
-  });
-  view.addEventListener('wheel', e => { e.preventDefault(); const r = view.getBoundingClientRect(); setZoom(st.z + (e.deltaY < 0 ? 1 : -1), e.clientX - r.left, e.clientY - r.top); }, {passive:false});
-  ov.querySelector('.mp-pins').addEventListener('input', e => { const r = e.target.closest('.mp-pinrow'); if (r){ st.pins[+r.dataset.i].label = e.target.value; draw(); } });
-  ov.querySelector('.mp-pins').addEventListener('click', e => { const r = e.target.closest('.mp-pinrow'); if (r && e.target.closest('[data-del]')){ st.pins.splice(+r.dataset.i, 1); draw(); side(); } else if (r && !e.target.closest('input')){ const p = st.pins[+r.dataset.i]; centerOn(p.lat, p.lng); } });
+  const centerOn = (lat, lng, z) => { if (!map) return; map.setCenter({lat, lng}); if (z) map.setZoom(z); };
+  async function start(){
+    keyBox.hidden = true;
+    try { G = await loadGMaps(); }
+    catch (e){ keyBox.hidden = false; ov.querySelector('.mk-err').textContent = e.message === 'nokey' ? '' : e.message === 'auth' ? 'Google rejected this key. Check that the APIs are enabled and the key allows this site address.' : 'Couldn’t reach Google Maps. Check your connection.'; if (e.message !== 'nokey') ov.querySelector('.mk-in').value = mapsKey(); return; }
+    gmEl.innerHTML = ''; geocoder = new G.Geocoder();
+    map = new G.Map(gmEl, {center:{lat:st.lat, lng:st.lng}, zoom:st.z, disableDefaultUI:true, gestureHandling:'greedy', clickableIcons:false, keyboardShortcuts:false, backgroundColor:isDark() ? '#1d1c19' : '#e8e4da', styles:isDark() ? GM_DARK : null});
+    map.addListener('click', e => { if (!st.pinMode) return; st.pins.push({id:uid(), lat:e.latLng.lat(), lng:e.latLng.lng(), label:''}); sync(); side(); sfx('pop'); setTimeout(() => ov.querySelector('.mp-pinrow:last-child input')?.focus(), 30); });
+    sync(); side();
+  }
+  ov.querySelector('.mk-go').addEventListener('click', () => { const v = ov.querySelector('.mk-in').value.trim(); if (!/^[\w-]{20,80}$/.test(v)){ ov.querySelector('.mk-err').textContent = 'That doesn’t look like a Google API key.'; return; } try { localStorage.setItem(GM_KEY_LS, v); } catch {} gmP = null; start(); });
+  ov.querySelector('.mk-in').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') ov.querySelector('.mk-go').click(); });
+  ov.querySelector('.mp-pins').addEventListener('input', e => { const r = e.target.closest('.mp-pinrow'); if (r){ st.pins[+r.dataset.i].label = e.target.value; markers[+r.dataset.i]?.setTitle(e.target.value); } });
+  ov.querySelector('.mp-pins').addEventListener('click', e => { const r = e.target.closest('.mp-pinrow'); if (r && e.target.closest('[data-del]')){ st.pins.splice(+r.dataset.i, 1); sync(); side(); } else if (r && !e.target.closest('input')){ const p = st.pins[+r.dataset.i]; centerOn(p.lat, p.lng); } });
   const q = ov.querySelector('.mp-search input'), res = ov.querySelector('.mp-res'); let qT = 0, qTok = 0;
   q.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape'){ res.hidden = true; q.blur(); } if (e.key === 'Enter'){ clearTimeout(qT); search(); } });
-  q.addEventListener('input', () => { clearTimeout(qT); if (q.value.trim().length < 3){ res.hidden = true; return; } qT = setTimeout(search, 700); });
+  q.addEventListener('input', () => { clearTimeout(qT); if (q.value.trim().length < 3){ res.hidden = true; return; } qT = setTimeout(search, 900); });
   async function search(){
-    const v = q.value.trim(); if (!v) return; const tok = ++qTok; res.hidden = false; res.innerHTML = '<div class="msg">Searching…</div>';
+    const v = q.value.trim(); if (!v || !geocoder) return; const tok = ++qTok; res.hidden = false; res.innerHTML = '<div class="msg">Searching…</div>';
     try {
-      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&q=${encodeURIComponent(v)}&accept-language=${encodeURIComponent(navigator.language || 'en')}`, {headers:{'Accept':'application/json'}});
-      const list = await r.json(); if (tok !== qTok) return;
-      res.innerHTML = list.length ? list.map((x, i) => `<button data-i="${i}">${esc(x.display_name)}</button>`).join('') : '<div class="msg">No places found</div>';
-      res.onclick = e => { const b = e.target.closest('[data-i]'); if (!b) return; const x = list[+b.dataset.i]; centerOn(+x.lat, +x.lon, 16); res.hidden = true; if (!st.pins.length) { st.pins.push({id:uid(), lat:+x.lat, lng:+x.lon, label:x.display_name.split(',')[0].slice(0, 40)}); side(); draw(); } if (st.title === 'Map') { st.title = x.display_name.split(',')[0].slice(0, 60); ov.querySelector('.nm').value = st.title; } };
-    } catch { if (tok === qTok) res.innerHTML = '<div class="msg">Search needs an internet connection</div>'; }
+      const { results:list } = await geocoder.geocode({address:v}); if (tok !== qTok) return;
+      res.innerHTML = list.length ? list.slice(0, 6).map((x, i) => `<button data-i="${i}">${esc(x.formatted_address)}</button>`).join('') : '<div class="msg">No places found</div>';
+      res.onclick = e => { const b = e.target.closest('[data-i]'); if (!b) return; const x = list[+b.dataset.i], ll = x.geometry.location, name = x.formatted_address.split(',')[0].slice(0, 40); res.hidden = true;
+        if (x.geometry.viewport) map.fitBounds(x.geometry.viewport); else centerOn(ll.lat(), ll.lng(), 16); if (map.getZoom() > 17) map.setZoom(17);
+        if (!st.pins.length){ st.pins.push({id:uid(), lat:ll.lat(), lng:ll.lng(), label:name}); sync(); side(); }
+        if (st.title === 'Map'){ st.title = name.slice(0, 60); ov.querySelector('.nm').value = st.title; } };
+    } catch (e) { if (tok === qTok) res.innerHTML = `<div class="msg">${/ZERO_RESULTS/.test(String(e)) ? 'No places found' : 'Search failed — check your connection and that the Geocoding API is enabled'}</div>`; }
   }
-  const close = () => { ov.classList.remove('show'); setTimeout(() => ov.remove(), 220); window.removeEventListener('resize', draw); document.removeEventListener('keydown', kd, true); };
+  const close = () => { ov.classList.remove('show'); setTimeout(() => ov.remove(), 220); document.removeEventListener('keydown', kd, true); };
   const kd = e => { if (!isTop(ov)) return; if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); close(); } };
-  document.addEventListener('keydown', kd, true); window.addEventListener('resize', draw);
+  document.addEventListener('keydown', kd, true);
   ov.querySelector('.ped-top').addEventListener('click', async e => {
     const a = e.target.closest('[data-x]')?.dataset.x; if (!a) return;
     if (a === 'cancel') return close();
-    const b = e.target.closest('[data-x]'); b.disabled = true; b.innerHTML = '<i class="spin"></i>Saving…';
-    const lat = y2lat(cy, st.z), lng = x2lon(cx, st.z), snapId = await mapSnapshot(lat, lng, st.z, st.pins, view.clientWidth, view.clientHeight);
-    commit(); Object.assign(c, {lat, lng, z:st.z, pins:st.pins, title:ov.querySelector('.nm').value.trim() || 'Map'});
-    if (snapId){ c.snap = snapId; const ar = view.clientWidth / view.clientHeight; c.ar = `${Math.round(ar * 100)}/100`; } else toast('Saved without a picture — map tiles couldn’t load');
+    if (!map){ toast('Connect Google Maps first'); return; }
+    const ctr = map.getCenter(), W = view.clientWidth, H = view.clientHeight;
+    commit(); Object.assign(c, {lat:ctr.lat(), lng:ctr.lng(), z:Math.round(map.getZoom()), pins:st.pins, vw:W, title:ov.querySelector('.nm').value.trim() || 'Map', ar:`${Math.round(W / H * 100)}/100`}); delete c.snap;
     rerenderCard(id); saveSoon(); sfx('success'); close();
   });
   ov.querySelector('.mp-ctrl').addEventListener('click', e => {
-    const a = e.target.closest('[data-x]')?.dataset.x; if (!a) return;
-    if (a === 'in') setZoom(st.z + 1); else if (a === 'out') setZoom(st.z - 1);
-    else if (a === 'pin'){ st.pinMode = !st.pinMode; e.target.closest('.ib').classList.toggle('on', st.pinMode); view.classList.toggle('pinning', st.pinMode); }
+    const a = e.target.closest('[data-x]')?.dataset.x; if (!a || !map) return;
+    if (a === 'in') map.setZoom(map.getZoom() + 1); else if (a === 'out') map.setZoom(map.getZoom() - 1);
+    else if (a === 'pin'){ st.pinMode = !st.pinMode; e.target.closest('.ib').classList.toggle('on', st.pinMode); map.setOptions({draggableCursor:st.pinMode ? 'crosshair' : null}); }
     else if (a === 'me'){ navigator.geolocation?.getCurrentPosition(p => centerOn(p.coords.latitude, p.coords.longitude, 15), () => toast('Couldn’t get your location')); }
   });
-  requestAnimationFrame(() => { draw(); side(); }); if (c.lat == null) setTimeout(() => q.focus(), 300);
-}
-async function mapSnapshot(lat, lng, z, pins, W, H){
-  const sc = Math.min(2, 1400 / Math.max(W, H)), cw = Math.round(W * sc), ch = Math.round(H * sc);
-  const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch; const g = cv.getContext('2d'); g.scale(sc, sc);
-  g.fillStyle = '#e8e4da'; g.fillRect(0, 0, W, H);
-  const cx = lon2x(lng, z), cy = lat2y(lat, z), tlx = cx - W / 2, tly = cy - H / 2, n = 2 ** z, jobs = [];
-  for (let ty = Math.floor(tly / 256); ty <= Math.floor((tly + H) / 256); ty++) for (let tx = Math.floor(tlx / 256); tx <= Math.floor((tlx + W) / 256); tx++){
-    if (ty < 0 || ty >= n) continue; const wx = ((tx % n) + n) % n;
-    jobs.push(new Promise(res => { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => { g.drawImage(im, tx * 256 - tlx, ty * 256 - tly, 256, 256); res(true); }; im.onerror = () => res(false); im.src = TILE(z, wx, ty); setTimeout(() => res(false), 8000); }));
-  }
-  const ok = (await Promise.all(jobs)).filter(Boolean).length; if (!ok) return null;
-  const pinImgs = await Promise.all(pins.map((p, i) => new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(PIN_SVG(i + 1, 30).replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ')); })));
-  g.font = '700 12px Inter, system-ui, sans-serif'; g.textAlign = 'center';
-  pins.forEach((p, i) => {
-    const x = lon2x(p.lng, z) - tlx, y = lat2y(p.lat, z) - tly; if (pinImgs[i]) g.drawImage(pinImgs[i], x - 15, y - 37.5, 30, 37.5);
-    if (p.label){ const w = g.measureText(p.label).width + 14; g.fillStyle = 'rgba(255,255,255,.95)'; g.beginPath(); g.roundRect?.(x - w / 2, y + 3, w, 20, 6) ?? g.rect(x - w / 2, y + 3, w, 20); g.fill(); g.fillStyle = '#1b1a17'; g.fillText(p.label, x, y + 17); }
-  });
-  try { const url = cv.toDataURL('image/webp', .86), id = uid(); await imgPut(id, url); imgCache.set(id, url); return id; } catch { return null; }
+  start(); if (c.lat == null) setTimeout(() => q.focus(), 300);
 }
 
 
@@ -9217,11 +9219,22 @@ function shareBundle(bid, keepMedia = false){
     }
   };
   walk(bid);
-  return {boards:out, skipped};
+  return {boards:out, skipped, fonts:shareFonts(out)};
+}
+/* Fonts a shared board relies on, so the viewer sees exactly what the owner sees. */
+function shareFonts(boards){
+  const head = S.meta.headFont && S.meta.headFont.family ? {kind:S.meta.headFont.kind, family:cleanFam(S.meta.headFont.family)} : null;
+  const blob = JSON.stringify(boards) + (head ? head.family : '');
+  const uses = fam => !!fam && blob.includes(fam);
+  return {
+    head,
+    uploads:(S.fonts || []).filter(f => uses(cleanFam(f.family))).map(f => ({id:f.id, family:cleanFam(f.family), file:f.file})),
+    text:(S.meta.textFonts || []).filter(f => f.kind === 'google' && uses(cleanFam(f.family))).map(f => ({kind:'google', family:cleanFam(f.family)}))
+  };
 }
 async function makeShareLink(bid){
-  const src = S.boards[bid], {boards, skipped} = shareBundle(bid);
-  const data = {app:'tessera', kind:'share', v:1, root:bid, title:src.title, boards};
+  const src = S.boards[bid], {boards, skipped, fonts} = shareBundle(bid);
+  const data = {app:'tessera', kind:'share', v:1, root:bid, title:src.title, boards, fonts:{head:fonts.head && fonts.head.kind !== 'upload' && fonts.head.kind !== 'local' ? fonts.head : null, uploads:[], text:fonts.text}};
   const packed = await pipeBytes(new TextEncoder().encode(JSON.stringify(data)), CompressionStream);
   return {url:location.href.split(/[#?]/)[0] + '#view=' + b64u.enc(packed), skipped, nb:Object.keys(boards).length, nc:Object.values(boards).reduce((n, x) => n + Object.keys(x.cards).length, 0)};
 }
@@ -9248,7 +9261,7 @@ async function bootViewerFrame(){
     } catch {}
     if (!cloud) return fail('This link doesn’t exist or has been turned off.');
   }
-  const boot = `<script>window.__SHARE=${JSON.stringify(isCloud ? {cloud, theme:isDark() ? 'dark' : 'light'} : {d:raw, theme:isDark() ? 'dark' : 'light'}).replace(/</g, '\\u003c')};<\/script>`;
+  const boot = `<script>window.__SHARE=${JSON.stringify(isCloud ? {cloud, theme:isDark() ? 'dark' : 'light', mapsKey:mapsKey()} : {d:raw, theme:isDark() ? 'dark' : 'light', mapsKey:mapsKey()}).replace(/</g, '\\u003c')};<\/script>`;
   const f = document.createElement('iframe');
   f.setAttribute('sandbox', 'allow-scripts allow-popups allow-popups-to-escape-sandbox allow-downloads');
   f.setAttribute('allow', 'fullscreen'); f.allowFullscreen = true; f.title = 'Shared Tessera board';
@@ -9275,7 +9288,11 @@ async function initViewer(){
   db = null; storageOK = false;
   S = {app:'tessera', version:2, rootId:d.root, boards:d.boards, trash:[], templates:[], meta:{welcomed:true, splashOff:true, pinned:[], recent:[]}};
   S.boards[d.root].parent = null;
-  normalizeState(); curId = S.rootId;
+  { const F = d.fonts && typeof d.fonts === 'object' ? d.fonts : {}, okF = f => f && typeof f.family === 'string' && cleanFam(f.family);
+    S.fonts = (Array.isArray(F.uploads) ? F.uploads : []).filter(f => okF(f) && typeof f.file === 'string').map(f => ({id:String(f.id || f.file), family:cleanFam(f.family), file:f.file}));
+    if (okF(F.head) && ['upload', 'google', 'local'].includes(F.head.kind)) S.meta.headFont = {kind:F.head.kind, family:cleanFam(F.head.family)};
+    S.meta.textFonts = (Array.isArray(F.text) ? F.text : []).filter(f => okF(f) && f.kind === 'google').map(f => ({kind:'google', family:cleanFam(f.family)})); }
+  normalizeState(); curId = S.rootId; syncUserFonts();
   document.body.classList.add('viewer');
   // Everything below keeps the frame strictly read-only: gestures only pan and zoom.
   const OK = 'a[href],.vd-play,.vd-close,.fr-fold,.col-fold,.sw-hex,.cd-copy,.tag-pill';
