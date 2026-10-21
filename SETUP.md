@@ -10,3 +10,14 @@
 6. Upload everything to GitHub Pages as before.
 
 Optional: Authentication -> SMTP Settings, add your own mail sender (the built-in one is rate-limited to a few emails per hour).
+
+## Google Maps (map cards)
+
+Map cards use Google Maps. You need your own API key:
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create or pick a project and turn on billing (Google's monthly free credit normally covers personal use).
+2. Enable **Maps JavaScript API**, **Geocoding API** and **Maps Static API**.
+3. Create an API key under *APIs & Services → Credentials*. Restrict it: *Application restrictions → Websites*, add your site address (for example `https://yourname.github.io/*`), and under *API restrictions* allow just those three APIs.
+4. Paste the key into `cloud-config.js` (`window.TESSERA_MAPS_KEY`), or leave it empty and paste it inside the map editor.
+
+Shared links carry the key so viewers see the same map, which is why the website restriction matters.
